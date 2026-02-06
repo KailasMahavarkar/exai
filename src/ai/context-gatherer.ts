@@ -14,7 +14,7 @@ import { validatePaths, gatherContext as gatherContextModule } from '../context/
 import type { GatherResult as ModuleGatherResult, CompressOptions, AiFilterFn } from '../context/index.js';
 import { filterFolders } from './folder-filter.js';
 
-const CACHE_DIR = `${tmpdir()}/excal-cache`;
+const CACHE_DIR = `${tmpdir()}/exai-cache`;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 

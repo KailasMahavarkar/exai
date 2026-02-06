@@ -34,7 +34,7 @@ export interface CacheOptions {
 }
 
 const DEFAULT_OPTIONS: Required<CacheOptions> = {
-  cacheDir: join(tmpdir(), 'excal-cache'),
+  cacheDir: join(tmpdir(), 'exai-cache'),
   ttlDays: 7,
   maxEntries: 100,
   verbose: false,

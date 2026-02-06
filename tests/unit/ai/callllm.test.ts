@@ -148,7 +148,7 @@ describe('callLLM', () => {
         expect(headers['Content-Type']).toBe('application/json');
         expect(headers.Authorization).toBe('Bearer key');
         expect(headers['HTTP-Referer']).toContain('github.com');
-        expect(headers['X-Title']).toBe('excal');
+        expect(headers['X-Title']).toBe('exai');
     });
 
     it('sends user prompt as the second message', async () => {

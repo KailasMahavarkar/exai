@@ -32,7 +32,7 @@ import type {
   DecorationAnchor,
 } from '../types/dsl.js';
 
-const SOURCE_URL = 'https://github.com/KailasMahavarkar/excal';
+const SOURCE_URL = 'https://github.com/KailasMahavarkar/exai';
 
 /**
  * Calculate decoration position offset

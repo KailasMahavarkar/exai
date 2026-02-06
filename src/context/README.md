@@ -375,13 +375,13 @@ The CLI uses this module automatically in the `ai` command:
 
 ```bash
 # With context gathering
-excal ai "create a flowchart for login flow" --context ./src --compress
+exai ai "create a flowchart for login flow" --context ./src --compress
 
 # Multiple contexts
-excal ai "diagram the architecture" -c ./src -c ./lib -c ./types
+exai ai "diagram the architecture" -c ./src -c ./lib -c ./types
 
 # Disable compression
-excal ai "show user service" --context ./src --no-compress
+exai ai "show user service" --context ./src --no-compress
 ```
 
 The CLI handles:

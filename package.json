@@ -1,12 +1,12 @@
 {
-  "name": "excal",
+  "name": "exai",
   "version": "1.0.0",
   "description": "AI-powered CLI for creating Excalidraw flowcharts from natural language",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "excal": "dist/cli.js"
+    "exai": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -35,7 +35,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/KailasMahavarkar/excal.git"
+    "url": "https://github.com/KailasMahavarkar/exai.git"
   },
   "files": [
     "dist"

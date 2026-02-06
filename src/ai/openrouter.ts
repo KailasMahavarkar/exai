@@ -10,7 +10,7 @@ import { OPENROUTER_API_URL, DEFAULT_MODEL, DEFAULT_TEMPERATURE } from "./contan
 
 // ── System Prompts ──────────────────────────────────────────────────────────
 
-const DSL_SYSTEM_PROMPT = `You are an expert at creating flowchart diagrams using excal DSL syntax.
+const DSL_SYSTEM_PROMPT = `You are an expert at creating flowchart diagrams using exai DSL syntax.
 
 Convert the user's natural language description into valid DSL format.
 
@@ -41,7 +41,7 @@ CRITICAL RULES:
 - Do NOT add explanations or comments
 - Output must be raw DSL that can be parsed directly`;
 
-const JSON_SYSTEM_PROMPT = `You are an expert at creating flowchart diagrams using excal JSON format.
+const JSON_SYSTEM_PROMPT = `You are an expert at creating flowchart diagrams using exai JSON format.
 
 Convert the user's natural language description into valid JSON format.
 
@@ -154,8 +154,8 @@ export async function callLLM(
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiKey}`,
-            'HTTP-Referer': 'https://github.com/KailasMahavarkar/excal',
-            'X-Title': 'excal',
+            'HTTP-Referer': 'https://github.com/KailasMahavarkar/exai',
+            'X-Title': 'exai',
         },
         body: JSON.stringify({
             model,

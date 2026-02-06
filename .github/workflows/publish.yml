@@ -36,6 +36,6 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
           body: |
-            Published to npm: https://www.npmjs.com/package/excal
+            Published to npm: https://www.npmjs.com/package/exai
           draft: false
           prerelease: false

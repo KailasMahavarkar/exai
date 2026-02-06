@@ -1,22 +1,22 @@
-# excal
+# exai
 
 CLI that turns natural language into Excalidraw flowcharts. Point it at your codebase, describe what you want, get a `.excalidraw` file.
 
 ```bash
-excal ai "visualize the auth flow" -c ./src -o auth.excalidraw
+exai ai "visualize the auth flow" -c ./src -o auth.excalidraw
 ```
 
 ## Install
 
 ```bash
-npm i -g excal
+npm i -g exai
 ```
 
 Or from source:
 
 ```bash
-git clone https://github.com/KailasMahavarkar/excal.git
-cd excal
+git clone https://github.com/KailasMahavarkar/exai.git
+cd exai
 npm install && npm run bundle
 ```
 
@@ -31,14 +31,14 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 Or use a config file:
 
 ```bash
-excal init                    # creates excal.config.json
+exai init                    # creates exai.config.json
 # add your apiKey, then:
-excal ai "prompt" --config-path ./excal.config.json
+exai ai "prompt" --config-path ./exai.config.json
 ```
 
 ## Config
 
-One file controls everything. Generate it with `excal init`.
+One file controls everything. Generate it with `exai init`.
 
 ```json
 {
@@ -86,20 +86,20 @@ All fields optional. CLI flags override config values.
 
 ```bash
 # AI generation
-excal ai "<prompt>" [options]
+exai ai "<prompt>" [options]
 
 # Create from DSL/JSON/DOT
-excal create [input] [options]
+exai create [input] [options]
 
 # Parse without generating
-excal parse <input>
+exai parse <input>
 
 # Cache management
-excal cache stats
-excal cache clear
+exai cache stats
+exai cache clear
 
 # Generate starter config
-excal init [path]
+exai init [path]
 ```
 
 ## DSL Syntax

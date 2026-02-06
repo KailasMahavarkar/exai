@@ -86,7 +86,7 @@ function getCompressionOptions(mode: string): CompressionOptions {
 }
 
 program
-    .name('excal')
+    .name('exai')
     .description('Create Excalidraw flowcharts from DSL, JSON, or DOT')
     .version('1.0.1');
 
@@ -422,7 +422,7 @@ program
                         console.log(`✅ Context gathering complete!`);
                         console.log(`📦 Size: ${(contextString.length / 1024).toFixed(1)}KB`);
                         if (contextResult.cacheKey) {
-                            const cachePath = join(tmpdir(), 'excal-cache', contextResult.cacheKey);
+                            const cachePath = join(tmpdir(), 'exai-cache', contextResult.cacheKey);
                             console.log(`🔑 Cache key: ${contextResult.cacheKey}`);
                             console.log(`📁 Cache path: ${cachePath}`);
                         }
@@ -575,7 +575,7 @@ program
 program
     .command('init')
     .description('Create a starter config file')
-    .argument('[path]', 'Output path for config file', 'excal.config.json')
+    .argument('[path]', 'Output path for config file', 'exai.config.json')
     .action((outputPath) => {
         try {
             const absolutePath = resolve(outputPath);
@@ -587,7 +587,7 @@ program
             const content = JSON.stringify(CONFIG_TEMPLATE, null, 2) + '\n';
             writeFileSync(absolutePath, content, 'utf-8');
             console.log(`Created config file: ${absolutePath}`);
-            console.log(`Use it with: excal ai "prompt" --config-path ${outputPath}`);
+            console.log(`Use it with: exai ai "prompt" --config-path ${outputPath}`);
         } catch (error) {
             console.error('Error:', error instanceof Error ? error.message : error);
             process.exit(1);
