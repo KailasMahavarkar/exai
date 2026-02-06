@@ -1,0 +1,64 @@
+{
+  "name": "excal",
+  "version": "1.4.0",
+  "description": "AI-powered CLI for creating Excalidraw flowcharts from natural language",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "excal": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "bundle": "tsc && npm link",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "release": "np",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "excalidraw",
+    "flowchart",
+    "diagram",
+    "cli",
+    "visualization",
+    "ai",
+    "llm",
+    "openrouter",
+    "code-to-diagram",
+    "natural-language"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KailasMahavarkar/excal.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "elkjs": "^0.9.3",
+    "genctx": "^0.2.3",
+    "nanoid": "^5.0.9",
+    "ts-graphviz": "^3.0.6",
+    "web-worker": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "eslint": "^9.17.0",
+    "np": "^11.0.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
