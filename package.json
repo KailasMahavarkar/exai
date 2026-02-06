@@ -1,6 +1,6 @@
 {
   "name": "excal",
-  "version": "1.4.0",
+  "version": "1.0.0",
   "description": "AI-powered CLI for creating Excalidraw flowcharts from natural language",
   "type": "module",
   "main": "dist/index.js",
