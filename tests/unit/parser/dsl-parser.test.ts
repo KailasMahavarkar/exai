@@ -1,199 +1,184 @@
 import { describe, it, expect } from 'vitest';
 import { parseDSL } from '../../../src/parser/dsl-parser.js';
 
-describe('DSL Parser', () => {
-  describe('node parsing', () => {
-    it('should parse rectangle nodes', () => {
-      const result = parseDSL('[Process Step]');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].type).toBe('rectangle');
-      expect(result.nodes[0].label).toBe('Process Step');
+describe('DSL Parser (directive-only)', () => {
+  describe('@node and @edge', () => {
+    it('parses explicit nodes and edges', () => {
+      const result = parseDSL(`
+        @node user user "End User"
+        @node api orchestrator "API Gateway"
+        @node db database "Orders DB"
+        @edge user api "calls"
+        @edge api db "writes" dashed
+      `);
+
+      expect(result.nodes).toHaveLength(3);
+      expect(result.edges).toHaveLength(2);
+
+      const userNode = result.nodes.find((n) => n.label === 'End User');
+      const apiNode = result.nodes.find((n) => n.label === 'API Gateway');
+      const dbNode = result.nodes.find((n) => n.label === 'Orders DB');
+
+      expect(userNode?.type).toBe('ellipse');
+      expect(apiNode?.type).toBe('rectangle');
+      expect(dbNode?.type).toBe('database');
+      expect(apiNode?.style?.strokeWidth).toBe(3);
+      expect(userNode?.style?.backgroundColor).toBe('#e7f5ff');
     });
 
-    it('should parse diamond nodes', () => {
-      const result = parseDSL('{Decision?}');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].type).toBe('diamond');
-      expect(result.nodes[0].label).toBe('Decision?');
-    });
+    it('supports @edge arrow variant', () => {
+      const result = parseDSL(`
+        @node a rectangle "Service A"
+        @node b rectangle "Service B"
+        @edge a -> b "calls"
+      `);
 
-    it('should parse ellipse nodes', () => {
-      const result = parseDSL('(Start)');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].type).toBe('ellipse');
-      expect(result.nodes[0].label).toBe('Start');
-    });
-
-    it('should parse database nodes', () => {
-      const result = parseDSL('[[Database]]');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].type).toBe('database');
-      expect(result.nodes[0].label).toBe('Database');
-    });
-  });
-
-  describe('connection parsing', () => {
-    it('should parse simple connections', () => {
-      const result = parseDSL('[A] -> [B]');
-      expect(result.nodes).toHaveLength(2);
       expect(result.edges).toHaveLength(1);
-      expect(result.edges[0].source).toBe(result.nodes[0].id);
-      expect(result.edges[0].target).toBe(result.nodes[1].id);
+      expect(result.edges[0].label).toBe('calls');
     });
 
-    it('should parse labeled connections', () => {
-      const result = parseDSL('[A] -> "yes" -> [B]');
-      expect(result.edges[0].label).toBe('yes');
+    it('auto-creates placeholder nodes for unknown edge refs', () => {
+      const result = parseDSL('@edge source target "flows"');
+      expect(result.nodes.some((n) => n.label === 'source')).toBe(true);
+      expect(result.nodes.some((n) => n.label === 'target')).toBe(true);
+      expect(result.edges).toHaveLength(1);
     });
 
-    it('should parse dashed connections', () => {
-      const result = parseDSL('[A] --> [B]');
-      expect(result.edges[0].style?.strokeStyle).toBe('dashed');
-    });
+    it('deduplicates identical directive edges', () => {
+      const result = parseDSL(`
+        @node a service "Service A"
+        @node b service "Service B"
+        @edge a b "calls"
+        @edge a b "calls"
+      `);
 
-    it('should parse chains of connections', () => {
-      const result = parseDSL('[A] -> [B] -> [C]');
-      expect(result.nodes).toHaveLength(3);
-      expect(result.edges).toHaveLength(2);
+      expect(result.edges).toHaveLength(1);
     });
   });
 
-  describe('directive parsing', () => {
-    it('should parse direction directive', () => {
-      const result = parseDSL('@direction LR\n[A] -> [B]');
+  describe('layout directives', () => {
+    it('parses direction and spacing directives', () => {
+      const result = parseDSL(`
+        @direction LR
+        @spacing 90
+        @node a rectangle "A"
+        @node b rectangle "B"
+        @edge a b
+      `);
+
       expect(result.options.direction).toBe('LR');
-    });
-
-    it('should parse spacing directive', () => {
-      const result = parseDSL('@spacing 100\n[A] -> [B]');
-      expect(result.options.nodeSpacing).toBe(100);
+      expect(result.options.nodeSpacing).toBe(90);
     });
   });
 
-  describe('complex flowcharts', () => {
-    it('should parse a decision tree', () => {
-      const dsl = `
-        (Start) -> [Enter Credentials] -> {Valid?}
-        {Valid?} -> "yes" -> [Dashboard] -> (End)
-        {Valid?} -> "no" -> [Show Error] -> [Enter Credentials]
-      `;
-      const result = parseDSL(dsl);
+  describe('style directives', () => {
+    it('parses node style tokens inline', () => {
+      const result = parseDSL('@node api service "API Gateway" bg:#f1f3f5 stroke:#495057 size:18 font:2 text:#111');
+      const api = result.nodes.find((n) => n.label === 'API Gateway');
 
-      expect(result.nodes.length).toBeGreaterThanOrEqual(5);
-      expect(result.edges.length).toBeGreaterThanOrEqual(5);
+      expect(api?.style?.backgroundColor).toBe('#f1f3f5');
+      expect(api?.style?.strokeColor).toBe('#495057');
+      expect(api?.style?.fontSize).toBe(18);
+      expect(api?.style?.fontFamily).toBe(2);
+      expect(api?.style?.textColor).toBe('#111');
     });
 
-    it('should deduplicate nodes by label and type', () => {
-      const result = parseDSL('[A] -> [B]\n[B] -> [C]');
-      const bNodes = result.nodes.filter((n) => n.label === 'B');
-      expect(bNodes).toHaveLength(1);
-    });
-  });
+    it('parses edge style tokens inline', () => {
+      const result = parseDSL(`
+        @node a rectangle "A"
+        @node b rectangle "B"
+        @edge a b "sync" color:#2f9e44 width:3 arrow:triangle start:dot
+      `);
 
-  describe('image parsing', () => {
-    it('should parse basic image nodes', () => {
-      const result = parseDSL('![logo.png]');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].type).toBe('image');
-      expect(result.nodes[0].label).toBe('logo.png');
-      expect(result.nodes[0].image?.src).toBe('logo.png');
-    });
-
-    it('should parse image nodes with dimensions', () => {
-      const result = parseDSL('![logo.png](200x100)');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].type).toBe('image');
-      expect(result.nodes[0].image?.width).toBe(200);
-      expect(result.nodes[0].image?.height).toBe(100);
-    });
-
-    it('should parse images in flowcharts', () => {
-      const result = parseDSL('(Start) -> ![icon.png] -> [Process]');
-      expect(result.nodes).toHaveLength(3);
-      expect(result.nodes[1].type).toBe('image');
-      expect(result.edges).toHaveLength(2);
-    });
-
-    it('should parse URL images', () => {
-      const result = parseDSL('![https://example.com/image.png]');
-      expect(result.nodes[0].image?.src).toBe('https://example.com/image.png');
+      expect(result.edges).toHaveLength(1);
+      expect(result.edges[0].style?.strokeColor).toBe('#2f9e44');
+      expect(result.edges[0].style?.strokeWidth).toBe(3);
+      expect(result.edges[0].style?.endArrowhead).toBe('triangle');
+      expect(result.edges[0].style?.startArrowhead).toBe('dot');
     });
   });
 
-  describe('image directive parsing', () => {
-    it('should parse @image at directive', () => {
-      const result = parseDSL('@image icon.png at 100,200');
-      expect(result.images).toHaveLength(1);
-      expect(result.images![0].src).toBe('icon.png');
+  describe('image and decoration directives', () => {
+    it('parses @image absolute and near', () => {
+      const result = parseDSL(`
+        @node start ellipse "Start"
+        @image icon.png at 100,200
+        @image badge.png near (Start) top-right
+      `);
+
+      expect(result.images).toHaveLength(2);
       expect(result.images![0].position).toEqual({ type: 'absolute', x: 100, y: 200 });
-    });
-
-    it('should parse @image near directive', () => {
-      const result = parseDSL('@image icon.png near (Start)');
-      expect(result.images).toHaveLength(1);
-      expect(result.images![0].position).toEqual({
+      expect(result.images![1].position).toEqual({
         type: 'near',
         nodeLabel: 'Start',
-        anchor: undefined,
+        anchor: 'top-right',
       });
     });
 
-    it('should parse @image near with anchor', () => {
-      const result = parseDSL('@image icon.png near (Start) top-left');
-      expect(result.images![0].position).toEqual({
-        type: 'near',
-        nodeLabel: 'Start',
-        anchor: 'top-left',
-      });
+    it('parses @decorate attached to preceding @node', () => {
+      const result = parseDSL('@node start ellipse "Start"\n@decorate holly.png top-left');
+      const start = result.nodes.find((n) => n.label === 'Start');
+
+      expect(start?.decorations).toHaveLength(1);
+      expect(start?.decorations?.[0].src).toBe('holly.png');
+      expect(start?.decorations?.[0].anchor).toBe('top-left');
     });
   });
 
-  describe('decoration parsing', () => {
-    it('should parse @decorate directive', () => {
-      const result = parseDSL('(Start) @decorate holly.png top-left');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].decorations).toHaveLength(1);
-      expect(result.nodes[0].decorations![0].src).toBe('holly.png');
-      expect(result.nodes[0].decorations![0].anchor).toBe('top-left');
-    });
+  describe('sticker, library, scatter', () => {
+    it('parses @library and @sticker', () => {
+      const result = parseDSL(`
+        @library ./stickers/
+        @sticker snowflake
+        @sticker star at 50,50
+      `);
 
-    it('should parse multiple decorations', () => {
-      const result = parseDSL('(Start) @decorate a.png top-left @decorate b.png top-right');
-      expect(result.nodes[0].decorations).toHaveLength(2);
-    });
-  });
-
-  describe('sticker and library parsing', () => {
-    it('should parse @library directive', () => {
-      const result = parseDSL('@library ./stickers/');
       expect(result.library).toBe('./stickers/');
+      expect(result.images).toHaveLength(2);
+      expect(result.images![0].src).toBe('sticker:snowflake');
+      expect(result.images![1].position).toEqual({ type: 'absolute', x: 50, y: 50 });
     });
 
-    it('should parse @sticker directive', () => {
-      const result = parseDSL('@sticker snowflake');
-      expect(result.images).toHaveLength(1);
-      expect(result.images![0].src).toBe('sticker:snowflake');
-    });
-
-    it('should parse @sticker with position', () => {
-      const result = parseDSL('@sticker snowflake at 50,50');
-      expect(result.images![0].src).toBe('sticker:snowflake');
-      expect(result.images![0].position).toEqual({ type: 'absolute', x: 50, y: 50 });
+    it('parses @scatter', () => {
+      const result = parseDSL('@scatter star.png count:10 width:30 height:30');
+      expect(result.scatter).toHaveLength(1);
+      expect(result.scatter![0]).toEqual({
+        src: 'star.png',
+        count: 10,
+        width: 30,
+        height: 30,
+      });
     });
   });
 
-  describe('scatter parsing', () => {
-    it('should parse @scatter directive', () => {
-      const result = parseDSL('@scatter snowflake.png count:20');
-      expect(result.scatter).toHaveLength(1);
-      expect(result.scatter![0].src).toBe('snowflake.png');
-      expect(result.scatter![0].count).toBe(20);
+  describe('@group', () => {
+    it('parses grouping with nodes and style', () => {
+      const result = parseDSL(`
+        @node web frontend "Web App"
+        @node api service "API"
+        @group app "Application Tier" nodes:web,api stroke:#495057 dashed padding:20
+      `);
+
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups?.[0].label).toBe('Application Tier');
+      expect(result.groups?.[0].nodeIds).toHaveLength(2);
+      expect(result.groups?.[0].style?.strokeColor).toBe('#495057');
+      expect(result.groups?.[0].style?.strokeStyle).toBe('dashed');
+      expect(result.groups?.[0].style?.padding).toBe(20);
+    });
+  });
+
+  describe('legacy syntax removal', () => {
+    it('throws on bracket/arrow DSL', () => {
+      expect(() => parseDSL('[A] -> [B]')).toThrow('Legacy DSL syntax is no longer supported');
     });
 
-    it('should parse @scatter with dimensions', () => {
-      const result = parseDSL('@scatter star.png count:10 width:30 height:30');
-      expect(result.scatter![0].width).toBe(30);
-      expect(result.scatter![0].height).toBe(30);
+    it('throws on inline image syntax', () => {
+      expect(() => parseDSL('![logo.png]')).toThrow('Legacy DSL syntax is no longer supported');
+    });
+
+    it('throws on non-directive free text', () => {
+      expect(() => parseDSL('hello world')).toThrow('Legacy DSL syntax is no longer supported');
     });
   });
 });

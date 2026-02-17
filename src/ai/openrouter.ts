@@ -10,38 +10,51 @@ import { OPENROUTER_API_URL, DEFAULT_MODEL, DEFAULT_TEMPERATURE } from "./contan
 
 // ── System Prompts ──────────────────────────────────────────────────────────
 
-const DSL_SYSTEM_PROMPT = `You are an expert at creating flowchart diagrams using exai DSL syntax.
+const DSL_PLAN_SYSTEM_PROMPT = `You are an expert software architecture diagram planner for Excalidraw.
 
-Convert the user's natural language description into valid DSL format.
+Convert the user's request into a STRICT JSON graph plan. Do NOT output DSL directly.
 
-IMPORTANT: If the user provides codebase context, you MUST analyze ONLY that specific codebase and create a diagram based on what you see in the provided code. Do NOT use your general knowledge about other projects.
+IMPORTANT CONTEXT RULE:
+- If codebase context is provided, analyze ONLY that codebase.
+- Do NOT use outside assumptions or hallucinated components.
 
-DSL Syntax:
-- [Label] = Rectangle (process steps, actions)
-- {Label} = Diamond (decisions, conditionals)
-- (Label) = Ellipse (start/end points)
-- [[Label]] = Database
-- -> = Arrow connection
-- --> = Dashed arrow
-- -> "text" -> = Labeled arrow
+Return ONLY valid JSON with this exact schema:
+{
+  "nodes": [
+    { "id": "string", "type": "rectangle|diamond|ellipse|database", "label": "string" }
+  ],
+  "edges": [
+    { "from": "node_id", "to": "node_id", "label": "optional", "dashed": false }
+  ],
+  "options": {
+    "direction": "TB|BT|LR|RL",
+    "spacing": 50
+  }
+}
 
-Directives:
-- @direction TB|BT|LR|RL (flow direction)
-- @spacing N (node spacing in pixels)
+ARCHITECTURE MODELING RULES:
+- Identify key components and flows:
+  - entry points/users/clients
+  - gateways/frontends
+  - services/workers
+  - databases/stores
+  - external systems/APIs
+- Use edge labels for meaningful interactions (e.g. "calls", "reads", "writes", "publishes", "consumes").
+- Prefer layered architecture layout (usually TB) unless user requests another direction.
+- Keep labels concise and concrete (recommended <= 60 chars).
+- Avoid decorative nodes.
+- Prefer rectangle/ellipse/database for architecture diagrams.
+- Use diamond ONLY when explicit decision logic is central to the requested flow.
 
-Example:
-(Start) -> [Process Data] -> {Valid?}
-{Valid?} -> "yes" -> [Save to DB] -> (End)
-{Valid?} -> "no" -> [Show Error] -> (End)
+GRAPH QUALITY RULES:
+- Output JSON object only (no markdown, no explanation).
+- Node IDs must be unique and stable-looking (e.g. "api-gateway", "user-service", "orders-db").
+- Every edge must reference valid node IDs.
+- Avoid duplicate edges with same from/to/label.
+- Prefer connected graphs; avoid isolated nodes unless explicitly requested.
+- Prefer 6-25 nodes unless user requests high detail or the system is tiny.`;
 
-CRITICAL RULES:
-- Output ONLY the DSL syntax
-- Do NOT wrap output in markdown code blocks
-- Do NOT include backticks
-- Do NOT add explanations or comments
-- Output must be raw DSL that can be parsed directly`;
-
-const JSON_SYSTEM_PROMPT = `You are an expert at creating flowchart diagrams using exai JSON format.
+const JSON_SYSTEM_PROMPT = `You are an expert at creating architecture/flowchart diagrams using exai JSON format.
 
 Convert the user's natural language description into valid JSON format.
 
@@ -66,6 +79,12 @@ Node Types:
 - diamond: Decisions, conditionals
 - ellipse: Start/end points
 - database: Data storage
+
+MODELING RULES:
+- Prefer architecture-relevant components and explicit data/control-flow edges.
+- Prefer rectangle/ellipse/database for architecture diagrams.
+- Use diamond only when explicit decision branching is required.
+- Avoid unsupported assumptions when context is provided.
 
 CRITICAL RULES:
 - Output ONLY valid JSON
@@ -102,6 +121,49 @@ export interface GenerateOptions {
     cacheOptions?: CacheOptions;
 }
 
+interface DslPlanNode {
+    id?: string;
+    type?: string;
+    label?: string;
+}
+
+interface DslPlanEdge {
+    from?: string;
+    to?: string;
+    label?: string;
+    dashed?: boolean;
+}
+
+interface DslPlan {
+    nodes?: DslPlanNode[];
+    edges?: DslPlanEdge[];
+    options?: {
+        direction?: string;
+        spacing?: number;
+        nodeSpacing?: number;
+    };
+}
+
+interface NormalizedDslNode {
+    id: string;
+    type: 'rectangle' | 'diamond' | 'ellipse' | 'database';
+    label: string;
+}
+
+interface NormalizedDslEdge {
+    from: string;
+    to: string;
+    label?: string;
+    dashed: boolean;
+}
+
+interface NormalizedDslPlan {
+    nodes: NormalizedDslNode[];
+    edges: NormalizedDslEdge[];
+    direction?: 'TB' | 'BT' | 'LR' | 'RL';
+    spacing?: number;
+}
+
 // ── callLLM (base) ─────────────────────────────────────────────────────────
 
 /**
@@ -115,11 +177,14 @@ export async function callLLM(
     systemPrompt?: string,
     options: CallLLMOptions = {}
 ): Promise<string> {
-    const apiKey = options.apiKey || process.env.OPENROUTER_API_KEY;
+    const apiKey =
+        options.apiKey ||
+        process.env.EXAI_OPENROUTER_APIKEY ||
+        process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
         throw new Error(
             'OpenRouter API key is required.\n' +
-            'Provide it via options or set OPENROUTER_API_KEY environment variable.\n' +
+            'Provide it via options or set EXAI_OPENROUTER_APIKEY / OPENROUTER_API_KEY environment variable.\n' +
             'Get your API key from https://openrouter.ai/keys'
         );
     }
@@ -206,8 +271,6 @@ export async function generateFlowchartInput(
     format: OutputFormat,
     options: GenerateOptions = {}
 ): Promise<string> {
-    const systemPrompt = format === 'dsl' ? DSL_SYSTEM_PROMPT : JSON_SYSTEM_PROMPT;
-
     // Build user message with optional context
     let userMessage = prompt;
     if (options.context) {
@@ -234,7 +297,30 @@ Now, analyze the codebase above and ${prompt}
 Remember: Base your diagram ONLY on the code provided between the BEGIN/END markers above.`;
     }
 
-    const raw = await callLLM(userMessage, systemPrompt, {
+    if (format === 'dsl') {
+        const rawPlan = await callLLM(userMessage, DSL_PLAN_SYSTEM_PROMPT, {
+            model: options.model,
+            apiKey: options.apiKey,
+            temperature: options.temperature,
+            verbose: options.verbose,
+            useCache: options.useCache,
+            cacheOptions: options.cacheOptions,
+            cacheFormat: 'dsl-plan',
+            cacheContext: options.context,
+        });
+
+        if (options.verbose) console.log(`  Rebuilding DSL from normalized plan...`);
+        try {
+            const plan = parseDslPlan(rawPlan);
+            const normalized = normalizeDslPlan(plan);
+            return buildDslFromPlan(normalized);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to build DSL from AI plan: ${message}`);
+        }
+    }
+
+    const raw = await callLLM(userMessage, JSON_SYSTEM_PROMPT, {
         model: options.model,
         apiKey: options.apiKey,
         temperature: options.temperature,
@@ -248,6 +334,194 @@ Remember: Base your diagram ONLY on the code provided between the BEGIN/END mark
     if (options.verbose) console.log(`  Cleaning and validating output...`);
 
     return cleanOutput(raw, format);
+}
+
+function parseDslPlan(raw: string): DslPlan {
+    let cleaned = raw.trim();
+    cleaned = cleaned.replace(/```(?:json)?\n?/gi, '');
+    cleaned = cleaned.replace(/```\n?/g, '').trim();
+
+    const firstObj = cleaned.indexOf('{');
+    const lastObj = cleaned.lastIndexOf('}');
+    if (firstObj !== -1 && lastObj > firstObj) {
+        cleaned = cleaned.slice(firstObj, lastObj + 1);
+    }
+
+    const parsed = JSON.parse(cleaned) as DslPlan;
+
+    if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Plan output is not a JSON object');
+    }
+
+    return parsed;
+}
+
+function normalizeDirection(value: string | undefined): 'TB' | 'BT' | 'LR' | 'RL' | undefined {
+    if (!value) return undefined;
+    const dir = value.toUpperCase();
+    return dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL' ? dir : undefined;
+}
+
+function normalizeNodeType(value: string | undefined): 'rectangle' | 'diamond' | 'ellipse' | 'database' {
+    if (!value) return 'rectangle';
+    const type = value.toLowerCase();
+
+    if (type === 'diamond' || type === 'decision' || type === 'condition') return 'diamond';
+    if (type === 'ellipse' || type === 'oval' || type === 'start' || type === 'end') return 'ellipse';
+    if (type === 'database' || type === 'db' || type === 'storage' || type === 'cylinder') return 'database';
+    return 'rectangle';
+}
+
+function sanitizeNodeLabel(label: string | undefined, fallback: string): string {
+    const value = (label || '').trim();
+    const cleaned = value
+        .replace(/[\[\]\{\}\(\)]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return cleaned || fallback;
+}
+
+function sanitizeEdgeLabel(label: string | undefined): string | undefined {
+    if (!label) return undefined;
+    const cleaned = label.replace(/\s+/g, ' ').trim();
+    return cleaned.length > 0 ? cleaned.slice(0, 120) : undefined;
+}
+
+function normalizeDslPlan(plan: DslPlan): NormalizedDslPlan {
+    const nodes: NormalizedDslNode[] = [];
+    const nodeById = new Map<string, NormalizedDslNode>();
+
+    const rawNodes = Array.isArray(plan.nodes) ? plan.nodes : [];
+    let autoNodeId = 1;
+    for (const rawNode of rawNodes) {
+        if (!rawNode || typeof rawNode !== 'object') continue;
+
+        const fallbackLabel = `Step ${autoNodeId}`;
+        const id = String(rawNode.id || `n${autoNodeId}`).trim();
+        const nodeId = id || `n${autoNodeId}`;
+        autoNodeId++;
+
+        if (nodeById.has(nodeId)) continue;
+
+        const node: NormalizedDslNode = {
+            id: nodeId,
+            type: normalizeNodeType(rawNode.type),
+            label: sanitizeNodeLabel(rawNode.label, fallbackLabel),
+        };
+        nodes.push(node);
+        nodeById.set(node.id, node);
+    }
+
+    if (nodes.length === 0) {
+        nodes.push(
+            { id: 'start', type: 'ellipse', label: 'Start' },
+            { id: 'end', type: 'ellipse', label: 'End' },
+        );
+        nodeById.set('start', nodes[0]);
+        nodeById.set('end', nodes[1]);
+    }
+
+    const edges: NormalizedDslEdge[] = [];
+    const rawEdges = Array.isArray(plan.edges) ? plan.edges : [];
+    for (const rawEdge of rawEdges) {
+        if (!rawEdge || typeof rawEdge !== 'object') continue;
+        const from = String(rawEdge.from || '').trim();
+        const to = String(rawEdge.to || '').trim();
+        if (!from || !to) continue;
+        if (!nodeById.has(from) || !nodeById.has(to)) continue;
+
+        edges.push({
+            from,
+            to,
+            label: sanitizeEdgeLabel(rawEdge.label),
+            dashed: rawEdge.dashed === true,
+        });
+    }
+
+    // If model returned nodes without edges, create a simple chain to ensure valid flow.
+    if (edges.length === 0 && nodes.length > 1) {
+        for (let i = 0; i < nodes.length - 1; i++) {
+            edges.push({
+                from: nodes[i].id,
+                to: nodes[i + 1].id,
+                dashed: false,
+            });
+        }
+    }
+
+    const direction = normalizeDirection(plan.options?.direction);
+    const spacingInput = plan.options?.spacing ?? plan.options?.nodeSpacing;
+    const spacing = typeof spacingInput === 'number' && Number.isFinite(spacingInput) && spacingInput > 0
+        ? Math.round(spacingInput)
+        : undefined;
+
+    return { nodes, edges, direction, spacing };
+}
+
+function normalizeDslRefId(raw: string, fallbackIndex: number): string {
+    const base = raw
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    return base || `n${fallbackIndex}`;
+}
+
+function quoteDsl(value: string): string {
+    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function buildDslFromPlan(plan: NormalizedDslPlan): string {
+    const lines: string[] = [];
+
+    if (plan.direction) lines.push(`@direction ${plan.direction}`);
+    if (plan.spacing) lines.push(`@spacing ${plan.spacing}`);
+    if (lines.length > 0) lines.push('');
+
+    const nodeRefByOriginalId = new Map<string, string>();
+    const usedRefs = new Set<string>();
+
+    for (let i = 0; i < plan.nodes.length; i++) {
+        const node = plan.nodes[i];
+        let ref = normalizeDslRefId(node.id, i + 1);
+        if (usedRefs.has(ref)) {
+            let suffix = 2;
+            while (usedRefs.has(`${ref}-${suffix}`)) suffix++;
+            ref = `${ref}-${suffix}`;
+        }
+        usedRefs.add(ref);
+        nodeRefByOriginalId.set(node.id, ref);
+
+        lines.push(`@node ${ref} ${node.type} ${quoteDsl(node.label)}`);
+    }
+
+    if (plan.nodes.length > 0 && plan.edges.length > 0) {
+        lines.push('');
+    }
+
+    for (const edge of plan.edges) {
+        const fromRef = nodeRefByOriginalId.get(edge.from);
+        const toRef = nodeRefByOriginalId.get(edge.to);
+        if (!fromRef || !toRef) continue;
+
+        let edgeLine = `@edge ${fromRef} ${toRef}`;
+        if (edge.label) {
+            edgeLine += ` ${quoteDsl(edge.label)}`;
+        }
+        if (edge.dashed) {
+            edgeLine += ' dashed';
+        }
+        lines.push(edgeLine);
+    }
+
+    const output = lines.join('\n').trim();
+    if (!output) {
+        return `@node start ellipse "Start"
+@node end ellipse "End"
+
+@edge start end`;
+    }
+    return output;
 }
 
 // ── Output cleaning ─────────────────────────────────────────────────────────
@@ -288,7 +562,7 @@ function cleanOutput(output: string, format: OutputFormat): string {
             );
         }
     } else if (format === 'dsl') {
-        if (!cleaned.includes('->') && !cleaned.includes('[') && !cleaned.includes('(')) {
+        if (!cleaned.includes('@node') && !cleaned.includes('@edge')) {
             throw new Error(
                 'AI output does not appear to be valid DSL. Expected nodes and connections.\n\n' +
                 'This is a bug in the AI model output. Please try again or use a different model.'

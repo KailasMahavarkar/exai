@@ -10,8 +10,10 @@ import type {
   LayoutedNode,
   LayoutedEdge,
   LayoutedImage,
+  LayoutedGroup,
   LayoutOptions,
   GraphNode,
+  GraphGroup,
   PositionedImage,
   DecorationAnchor,
 } from '../types/dsl.js';
@@ -118,6 +120,49 @@ function getElkDirection(direction: LayoutOptions['direction']): string {
     RL: 'LEFT',
   };
   return mapping[direction] || 'DOWN';
+}
+
+/**
+ * Resolve group boundaries from layouted nodes.
+ */
+function resolveGroups(groups: GraphGroup[] | undefined, layoutedNodes: LayoutedNode[]): LayoutedGroup[] {
+  if (!groups || groups.length === 0) return [];
+
+  const nodeById = new Map<string, LayoutedNode>();
+  for (const node of layoutedNodes) {
+    nodeById.set(node.id, node);
+  }
+
+  const resolved: LayoutedGroup[] = [];
+  for (const group of groups) {
+    const members = group.nodeIds.map((id) => nodeById.get(id)).filter((n): n is LayoutedNode => Boolean(n));
+    if (members.length === 0) continue;
+
+    const padding = Math.max(0, group.style?.padding ?? 30);
+    const labelBand = 24;
+
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    for (const member of members) {
+      minX = Math.min(minX, member.x);
+      minY = Math.min(minY, member.y);
+      maxX = Math.max(maxX, member.x + member.width);
+      maxY = Math.max(maxY, member.y + member.height);
+    }
+
+    resolved.push({
+      ...group,
+      x: Math.max(0, minX - padding),
+      y: Math.max(0, minY - padding - labelBand),
+      width: maxX - minX + padding * 2,
+      height: maxY - minY + padding * 2 + labelBand,
+    });
+  }
+
+  return resolved;
 }
 
 /**
@@ -252,12 +297,19 @@ export async function layoutGraph(graph: FlowchartGraph, verbose: boolean = fals
     });
   }
 
+  // Resolve group boundaries after node positions are known.
+  const layoutedGroups = resolveGroups(graph.groups, layoutedNodes);
+
   // Calculate total dimensions
   let maxX = 0;
   let maxY = 0;
   for (const node of layoutedNodes) {
     maxX = Math.max(maxX, node.x + node.width);
     maxY = Math.max(maxY, node.y + node.height);
+  }
+  for (const group of layoutedGroups) {
+    maxX = Math.max(maxX, group.x + group.width);
+    maxY = Math.max(maxY, group.y + group.height);
   }
 
   const canvasWidth = maxX + graph.options.padding;
@@ -279,6 +331,7 @@ export async function layoutGraph(graph: FlowchartGraph, verbose: boolean = fals
     height: canvasHeight,
   };
 
+  if (layoutedGroups.length > 0) result.groups = layoutedGroups;
   if (layoutedImages.length > 0) result.images = layoutedImages;
   if (graph.scatter && graph.scatter.length > 0) result.scatter = graph.scatter;
   if (graph.library) result.library = graph.library;

@@ -42,6 +42,8 @@ export interface CompressionResult {
 
 
 const program = new Command();
+const EXAI_API_KEY_ENV = 'EXAI_OPENROUTER_APIKEY';
+const LEGACY_OPENROUTER_API_KEY_ENV = 'OPENROUTER_API_KEY';
 
 /**
  * Get compression options based on mode
@@ -83,6 +85,73 @@ function getCompressionOptions(mode: string): CompressionOptions {
                 preserveFunctionSignatures: true,
             };
     }
+}
+
+function unquoteEnvValue(value: string): string {
+    const trimmed = value.trim();
+    if (
+        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+        return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+}
+
+function readApiKeysFromDotEnv(envPath: string = resolve('.env')): { exai?: string; legacy?: string } {
+    if (!existsSync(envPath)) return {};
+
+    try {
+        const content = readFileSync(envPath, 'utf-8');
+        let exai: string | undefined;
+        let legacy: string | undefined;
+
+        for (const line of content.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+
+            const normalized = trimmed.startsWith('export ') ? trimmed.slice(7).trim() : trimmed;
+            const eq = normalized.indexOf('=');
+            if (eq <= 0) continue;
+
+            const key = normalized.slice(0, eq).trim();
+            const value = unquoteEnvValue(normalized.slice(eq + 1));
+            if (!value) continue;
+
+            if (key === EXAI_API_KEY_ENV) exai = value;
+            if (key === LEGACY_OPENROUTER_API_KEY_ENV) legacy = value;
+        }
+
+        return { exai, legacy };
+    } catch {
+        return {};
+    }
+}
+
+function resolveApiKey(optionsApiKey: string | undefined, configApiKey: string | undefined, command: Command): {
+    apiKey?: string;
+    source?: '--api-key' | 'EXAI_OPENROUTER_APIKEY' | 'OPENROUTER_API_KEY' | 'config';
+} {
+    // 1) Explicit CLI flag
+    const fromCli = command.getOptionValueSource('apiKey') === 'cli' ? optionsApiKey?.trim() : undefined;
+    if (fromCli) return { apiKey: fromCli, source: '--api-key' };
+
+    const envFileKeys = readApiKeysFromDotEnv();
+
+    // 2) Environment / .env (preferred)
+    const fromExaiEnv = process.env[EXAI_API_KEY_ENV]?.trim() || envFileKeys.exai?.trim();
+    if (fromExaiEnv) return { apiKey: fromExaiEnv, source: EXAI_API_KEY_ENV };
+
+    // Optional backward compatibility
+    const fromLegacyEnv =
+        process.env[LEGACY_OPENROUTER_API_KEY_ENV]?.trim() || envFileKeys.legacy?.trim();
+    if (fromLegacyEnv) return { apiKey: fromLegacyEnv, source: LEGACY_OPENROUTER_API_KEY_ENV };
+
+    // 3) Config file fallback
+    const fromConfig = configApiKey?.trim();
+    if (fromConfig) return { apiKey: fromConfig, source: 'config' };
+
+    return {};
 }
 
 program
@@ -258,7 +327,7 @@ program
     .option('-s, --spacing <n>', 'Node spacing in pixels')
     .option('-c, --context <path>', 'Include file or folder as context (can be used multiple times)', (value, previous: string[]) => previous.concat([value]), [] as string[])
     .option('--model <model>', 'OpenRouter model (default: moonshotai/kimi-k2.5)')
-    .option('--api-key <key>', 'OpenRouter API key (overrides OPENROUTER_API_KEY env var)')
+    .option('--api-key <key>', `OpenRouter API key (overrides ${EXAI_API_KEY_ENV} from env/.env)`)
     .option('--temperature <n>', 'Model temperature 0-2 (default: 0)', '0')
     .option('--exclude <pattern>', 'Exclude pattern for context gathering (can be used multiple times)', (value: string, previous: string[]) => previous.concat([value]), [] as string[])
     .option('--allow-test-files', 'Include test files in context (default: excluded)')
@@ -273,7 +342,7 @@ program
             const startTime = Date.now();
 
             // Load config file if provided and merge with CLI options
-            // Priority: CLI flags > config file > env vars > hardcoded defaults
+            // Priority: CLI flags > env/.env > config file > hardcoded defaults
             let config: CliConfig = {};
             if (options.configPath) {
                 config = loadConfig(options.configPath);
@@ -283,7 +352,6 @@ program
 
                 // AI / LLM
                 if (config.model !== undefined && src('model') !== 'cli') options.model = config.model;
-                if (config.apiKey !== undefined && src('apiKey') !== 'cli') options.apiKey = config.apiKey;
                 if (config.temperature !== undefined && src('temperature') !== 'cli') options.temperature = String(config.temperature);
 
                 // Output
@@ -325,6 +393,18 @@ program
             if (isNaN(temperature) || temperature < 0 || temperature > 2) {
                 console.error('Error: Temperature must be a number between 0 and 2.');
                 process.exit(1);
+            }
+
+            const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(options.apiKey, config.apiKey, command);
+            if (!resolvedApiKey) {
+                console.error('⚠️  Missing API key.');
+                console.error(`Set it via --api-key, ${EXAI_API_KEY_ENV} in .env/env, or config file "apiKey".`);
+                process.exitCode = 1;
+                return;
+            }
+            options.apiKey = resolvedApiKey;
+            if (options.verbose) {
+                console.log(`🔑 API key source: ${apiKeySource}`);
             }
 
             // Determine model to use

@@ -26,6 +26,7 @@ export interface NodeStyle {
   opacity?: number;
   fontSize?: number;
   fontFamily?: number;
+  textColor?: string;
   roughness?: number;
 }
 
@@ -39,6 +40,22 @@ export interface EdgeStyle {
   startArrowhead?: ArrowheadType;
   endArrowhead?: ArrowheadType;
   roughness?: number;
+}
+
+/**
+ * Group style configuration
+ */
+export interface GroupStyle {
+  backgroundColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  strokeStyle?: StrokeStyle;
+  opacity?: number;
+  roughness?: number;
+  fontSize?: number;
+  fontFamily?: number;
+  textColor?: string;
+  padding?: number;
 }
 
 /**
@@ -97,6 +114,16 @@ export interface GraphEdge {
 }
 
 /**
+ * Logical group of nodes
+ */
+export interface GraphGroup {
+  id: string;
+  label: string;
+  nodeIds: string[];
+  style?: GroupStyle;
+}
+
+/**
  * Layout configuration options
  */
 export interface LayoutOptions {
@@ -137,6 +164,7 @@ export interface FlowchartGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
   options: LayoutOptions;
+  groups?: GraphGroup[]; // @group directives
   images?: PositionedImage[]; // @image directives
   scatter?: ScatterConfig[]; // @scatter directives
   library?: string; // @library path
@@ -204,6 +232,16 @@ export interface LayoutedImage {
 }
 
 /**
+ * Layouted group boundary with resolved coordinates
+ */
+export interface LayoutedGroup extends GraphGroup {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
  * Layouted flowchart graph
  */
 export interface LayoutedGraph {
@@ -212,6 +250,7 @@ export interface LayoutedGraph {
   options: LayoutOptions;
   width: number;
   height: number;
+  groups?: LayoutedGroup[]; // Resolved group boundaries
   images?: LayoutedImage[]; // Resolved positioned images
   scatter?: ScatterConfig[]; // Scatter configs for post-layout generation
   library?: string; // Library path

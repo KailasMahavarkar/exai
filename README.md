@@ -25,8 +25,10 @@ npm install && npm run bundle
 Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys), then either:
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-v1-..."
+export EXAI_OPENROUTER_APIKEY="sk-or-v1-..."
 ```
+
+`OPENROUTER_API_KEY` is also accepted for backward compatibility.
 
 Or use a config file:
 
@@ -104,13 +106,34 @@ exai init [path]
 
 ## DSL Syntax
 
+Directive-style DSL:
+
 ```
-(Start) -> [Process] -> {Decision?}
-{Decision?} -> "yes" -> [[Save to DB]] -> (End)
-{Decision?} -> "no" -> [Retry] -> (Start)
+@direction TB
+@spacing 60
+
+@node user user "End User"
+@node api orchestrator "API Gateway" bg:#ffe3e3 stroke:#c92a2a size:18 font:2
+@node auth service "Auth Service" bg:#e5dbff stroke:#7048e8
+@node db database "Users DB" bg:#d3f9d8 stroke:#2f9e44
+
+@edge user api "calls"
+@edge api auth "validates token" color:#495057 width:2
+@edge auth db "reads/writes" dashed color:#2f9e44 arrow:triangle
+
+@group core "Core Services" nodes:api,auth,db stroke:#868e96 dashed padding:24
 ```
 
-`[rect]` `{diamond}` `(ellipse)` `[[database]]` `->` `-->` `-> "label" ->`
+`@node <id> <type-or-kind> "<label>"`  
+`@edge <fromId> <toId> ["label"] [dashed] [style...]`  
+`@group <id> "<label>" nodes:<id,id,...> [style...]`
+
+Common kinds: `user`, `frontend`, `backend`, `service`, `api`, `worker`, `database`, `storage`, `queue`, `cache`, `external`, `orchestrator`, `decision`.
+
+Common style tokens:
+- Node: `bg:#hex`, `stroke:#hex`, `size:18`, `font:2|virgil|helvetica|cascadia|excalifont`, `text:#hex`
+- Edge: `color:#hex`, `width:3`, `arrow:arrow|bar|dot|triangle|null`, `start:...`, `dashed|dotted|solid`
+- Group: `stroke:#hex`, `bg:#hex`, `padding:24`, `dashed|solid|dotted`
 
 ## License
 

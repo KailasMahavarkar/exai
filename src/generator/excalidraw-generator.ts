@@ -6,8 +6,10 @@
 
 import { nanoid } from 'nanoid';
 import {
+  createBaseElement,
   createNode,
   createArrow,
+  createText,
   createNodeLabel,
   createEdgeLabel,
   resetIndexCounter,
@@ -107,6 +109,10 @@ function generateScatteredImages(
   }
 }
 
+function sanitizeGroupId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || nanoid(8);
+}
+
 /**
  * Generate an Excalidraw file from a layouted graph
  */
@@ -123,8 +129,69 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
     nodeMap.set(node.id, node);
   }
 
+  // Build group membership map per node.
+  const nodeGroupIds = new Map<string, string[]>();
+  const groupIdsByRef = new Map<string, string>();
+  if (graph.groups) {
+    for (const group of graph.groups) {
+      const normalizedGroupId = `grp-${sanitizeGroupId(group.id)}`;
+      groupIdsByRef.set(group.id, normalizedGroupId);
+      for (const nodeId of group.nodeIds) {
+        const current = nodeGroupIds.get(nodeId) || [];
+        if (!current.includes(normalizedGroupId)) {
+          current.push(normalizedGroupId);
+          nodeGroupIds.set(nodeId, current);
+        }
+      }
+    }
+  }
+
+  // Draw group boundaries before nodes so they stay behind content.
+  if (graph.groups) {
+    for (const group of graph.groups) {
+      const normalizedGroupId = groupIdsByRef.get(group.id)!;
+      const groupBoxId = `group-box-${normalizedGroupId}`;
+      const groupLabelId = `group-label-${normalizedGroupId}`;
+
+      const boundary = {
+        ...createBaseElement('rectangle', group.x, group.y, group.width, group.height, {
+          id: groupBoxId,
+          strokeColor: group.style?.strokeColor ?? '#495057',
+          backgroundColor: group.style?.backgroundColor ?? 'transparent',
+          strokeWidth: group.style?.strokeWidth ?? 1,
+          strokeStyle: group.style?.strokeStyle ?? 'dashed',
+          roughness: group.style?.roughness ?? 0,
+          opacity: group.style?.opacity ?? 100,
+          roundness: { type: 3 },
+          groupIds: [normalizedGroupId],
+          boundElements: [{ id: groupLabelId, type: 'text' }],
+        }),
+        type: 'rectangle' as const,
+      } as ExcalidrawElement;
+      elements.push(boundary);
+
+      const groupLabel = createText(group.label, group.x + 12, group.y + 8, {
+        id: groupLabelId,
+        fontSize: group.style?.fontSize ?? 16,
+        fontFamily: group.style?.fontFamily,
+        strokeColor: group.style?.textColor ?? group.style?.strokeColor ?? '#343a40',
+        textAlign: 'left',
+        verticalAlign: 'top',
+      });
+      (groupLabel as { containerId: string | null }).containerId = groupBoxId;
+      (groupLabel as { groupIds: string[] }).groupIds = [normalizedGroupId];
+      elements.push(groupLabel);
+    }
+  }
+
   // Calculate bound elements for each node (only for non-image nodes)
   const nodeBoundElements = new Map<string, ExcalidrawBoundElement[]>();
+
+  for (const node of graph.nodes) {
+    if (node.type !== 'image') {
+      nodeBoundElements.set(node.id, [{ id: `text-${node.id}`, type: 'text' }]);
+    }
+  }
 
   for (const edge of graph.edges) {
     const sourceNode = nodeMap.get(edge.source);
@@ -160,11 +227,19 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
     } else {
       // Create shape element
       const boundElements = nodeBoundElements.get(node.id);
-      const shapeElement = createNode(node, boundElements);
+      const groupIds = nodeGroupIds.get(node.id);
+      const shapeElement = createNode(node, boundElements, groupIds);
       elements.push(shapeElement);
 
       // Create text label for the node
-      const textElement = createNodeLabel(node);
+      const textElement = createNodeLabel(node, {
+        id: `text-${node.id}`,
+        containerId: node.id,
+        fontSize: node.style?.fontSize,
+        fontFamily: node.style?.fontFamily,
+        strokeColor: node.style?.textColor,
+        groupIds,
+      });
       elements.push(textElement);
 
       // Create decoration images for this node
@@ -222,10 +297,9 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
         edge.points,
         edge.sourcePoint.x,
         edge.sourcePoint.y,
-        edge.id
+        edge.id,
+        { id: `text-${edge.id}` }
       );
-      // Override the text element ID to match what we bound
-      (textElement as { id: string }).id = `text-${edge.id}`;
       elements.push(textElement);
     }
   }

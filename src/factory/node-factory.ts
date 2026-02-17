@@ -35,7 +35,8 @@ function mapStyle(style?: NodeStyle): Partial<ExcalidrawRectangle> {
  */
 export function createRectangle(
   node: LayoutedNode,
-  boundElements?: ExcalidrawBoundElement[]
+  boundElements?: ExcalidrawBoundElement[],
+  groupIds?: string[]
 ): ExcalidrawRectangle {
   const styleProps = mapStyle(node.style);
 
@@ -44,6 +45,7 @@ export function createRectangle(
       id: node.id,
       roundness: { type: 3 }, // Adaptive roundness
       boundElements: boundElements || null,
+      groupIds: groupIds || [],
       ...styleProps,
     }),
     type: 'rectangle',
@@ -55,7 +57,8 @@ export function createRectangle(
  */
 export function createDiamond(
   node: LayoutedNode,
-  boundElements?: ExcalidrawBoundElement[]
+  boundElements?: ExcalidrawBoundElement[],
+  groupIds?: string[]
 ): ExcalidrawDiamond {
   const styleProps = mapStyle(node.style);
 
@@ -64,6 +67,7 @@ export function createDiamond(
       id: node.id,
       roundness: { type: 2 }, // Proportional roundness
       boundElements: boundElements || null,
+      groupIds: groupIds || [],
       ...styleProps,
     }),
     type: 'diamond',
@@ -75,7 +79,8 @@ export function createDiamond(
  */
 export function createEllipse(
   node: LayoutedNode,
-  boundElements?: ExcalidrawBoundElement[]
+  boundElements?: ExcalidrawBoundElement[],
+  groupIds?: string[]
 ): ExcalidrawEllipse {
   const styleProps = mapStyle(node.style);
 
@@ -84,6 +89,7 @@ export function createEllipse(
       id: node.id,
       roundness: null, // Ellipses don't use roundness
       boundElements: boundElements || null,
+      groupIds: groupIds || [],
       ...styleProps,
     }),
     type: 'ellipse',
@@ -95,18 +101,19 @@ export function createEllipse(
  */
 export function createNode(
   node: LayoutedNode,
-  boundElements?: ExcalidrawBoundElement[]
+  boundElements?: ExcalidrawBoundElement[],
+  groupIds?: string[]
 ): ExcalidrawRectangle | ExcalidrawDiamond | ExcalidrawEllipse {
   switch (node.type) {
     case 'diamond':
-      return createDiamond(node, boundElements);
+      return createDiamond(node, boundElements, groupIds);
     case 'ellipse':
-      return createEllipse(node, boundElements);
+      return createEllipse(node, boundElements, groupIds);
     case 'database':
       // Database is rendered as rectangle with special styling
-      return createRectangle(node, boundElements);
+      return createRectangle(node, boundElements, groupIds);
     case 'rectangle':
     default:
-      return createRectangle(node, boundElements);
+      return createRectangle(node, boundElements, groupIds);
   }
 }
