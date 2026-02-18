@@ -380,11 +380,6 @@ program
                 }
             }
 
-            // Default context to CWD (project root) if not specified via CLI or config
-            if (options.context.length === 0) {
-                options.context = [process.cwd()];
-            }
-
             const format = options.format as OutputFormat;
 
             // Validate format
