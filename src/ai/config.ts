@@ -252,7 +252,7 @@ export const CONFIG_TEMPLATE: CliConfig = {
         removeComments: true,
         minifyWhitespace: true,
         extractSignaturesOnly: false,
-        maxFileLines: 1000,
+        maxFileLines: 100,
         preserveImports: true,
         preserveExports: true,
         preserveTypes: true,
