@@ -13,7 +13,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, isAbsolute } from 'path';
 
 // ── Nested option types ─────────────────────────────────────────────────────
 
@@ -141,7 +141,7 @@ function parseCompressOptions(obj: unknown): ConfigCompressOptions {
  * Load and validate a CLI config file.
  *
  * - Resolves configPath relative to CWD
- * - Resolves `context` paths relative to the config file's directory
+ * - Absolute context paths are used as-is; relative paths resolve from the config file's directory
  * - Throws on missing file or invalid JSON
  */
 export function loadConfig(configPath: string): CliConfig {
@@ -195,7 +195,7 @@ export function loadConfig(configPath: string): CliConfig {
     // Context gathering
     if (obj.context !== undefined) {
         const paths = assertStringArray(obj, 'context');
-        config.context = paths.map((p: string) => resolve(configDir, p));
+        config.context = paths.map((p: string) => isAbsolute(p) ? p : resolve(configDir, p));
     }
     if (obj.exclude !== undefined) config.exclude = assertStringArray(obj, 'exclude');
     if (obj.allowTestFiles !== undefined) config.allowTestFiles = assertBoolean(obj, 'allowTestFiles');
