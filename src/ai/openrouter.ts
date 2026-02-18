@@ -5,23 +5,24 @@
  * generateFlowchartInput() → flowchart-specific wrapper (uses callLLM)
  */
 
-import { getCachedResponse, cacheResponse, type CacheOptions } from './query-cache.js';
+import { getCachedResponse, cacheResponse } from './query-cache.js';
 import { OPENROUTER_API_URL, DEFAULT_MODEL, DEFAULT_TEMPERATURE } from "./contants.js"
 
 // ── System Prompts ──────────────────────────────────────────────────────────
 
-const DSL_PLAN_SYSTEM_PROMPT = `You are an expert software architecture diagram planner for Excalidraw.
+const DSL_PLAN_SYSTEM_PROMPT = `You are an expert diagram planner for Excalidraw.
 
 Convert the user's request into a STRICT JSON graph plan. Do NOT output DSL directly.
+You handle ANY kind of diagram: software architecture, folder structures, process flows, org charts, data pipelines, workflows, etc.
 
 IMPORTANT CONTEXT RULE:
-- If codebase context is provided, analyze ONLY that codebase.
+- If codebase/folder context is provided, analyze ONLY that content.
 - Do NOT use outside assumptions or hallucinated components.
 
 Return ONLY valid JSON with this exact schema:
 {
   "nodes": [
-    { "id": "string", "type": "rectangle|diamond|ellipse|database", "label": "string" }
+    { "id": "string", "type": "string", "label": "string", "color": "optional hex" }
   ],
   "edges": [
     { "from": "node_id", "to": "node_id", "label": "optional", "dashed": false }
@@ -32,27 +33,50 @@ Return ONLY valid JSON with this exact schema:
   }
 }
 
-ARCHITECTURE MODELING RULES:
-- Identify key components and flows:
-  - entry points/users/clients
-  - gateways/frontends
-  - services/workers
-  - databases/stores
-  - external systems/APIs
-- Use edge labels for meaningful interactions (e.g. "calls", "reads", "writes", "publishes", "consumes").
-- Prefer layered architecture layout (usually TB) unless user requests another direction.
-- Keep labels concise and concrete (recommended <= 60 chars).
-- Avoid decorative nodes.
-- Prefer rectangle/ellipse/database for architecture diagrams.
-- Use diamond ONLY when explicit decision logic is central to the requested flow.
+NODE TYPES — choose the best shape for each node:
+- "rectangle"   — default box, general purpose
+- "ellipse"     — actors, start/end points, users, external entities
+- "diamond"     — decisions, conditionals, branch points
+- "database"    — data stores, databases, storage, files
+- Semantic aliases (auto-colored): "user", "frontend", "api", "service", "worker",
+  "queue", "cache", "db", "storage", "external", "orchestrator"
+  Use these when the diagram is software/infrastructure — they get automatic colors.
+
+COLOR RULES — you decide the color based on the diagram's nature:
+- Group nodes of the same role/tier with the same color.
+- Use a small palette: 2-4 colors max per diagram.
+- Lighter background + darker stroke of the same hue looks best.
+- For "color" field use hex like "#a5d8ff" (background). The stroke is auto-derived darker.
+- Omit "color" for nodes that should stay default (white/no fill).
+- COLOR BY ROLE — pick a consistent scheme:
+  * Entry/actor nodes (users, clients, browsers) → light blue  e.g. "#e7f5ff"
+  * Processing nodes (services, handlers, routes) → light purple e.g. "#f3f0ff"
+  * Data nodes (databases, files, storage) → light green e.g. "#d3f9d8"
+  * Async/queue nodes (queues, events, jobs) → light yellow e.g. "#fff9db"
+  * External/boundary nodes → light red/pink e.g. "#ffe3e3"
+  * Decision nodes → light orange e.g. "#fff4e6"
+  * For folder/file structures: group by folder depth or file type
+  * For process flows: group by phase (input/process/output → 3 colors)
+  * For org charts: group by team or hierarchy level
+
+DIAGRAM MODELING RULES:
+- Use edge labels for meaningful relationships: "calls", "reads", "writes", "contains", "depends on", "triggers", "returns", "inherits".
+- Choose direction: TB (top-down flows), LR (pipelines, sequences), BT/RL rarely.
+- Keep labels concise (≤ 40 chars).
+- Avoid decorative or redundant nodes.
 
 GRAPH QUALITY RULES:
 - Output JSON object only (no markdown, no explanation).
-- Node IDs must be unique and stable-looking (e.g. "api-gateway", "user-service", "orders-db").
+- Node IDs must be unique and slug-like (e.g. "auth-service", "users-db", "src-folder").
 - Every edge must reference valid node IDs.
 - Avoid duplicate edges with same from/to/label.
 - Prefer connected graphs; avoid isolated nodes unless explicitly requested.
-- Prefer 6-25 nodes unless user requests high detail or the system is tiny.`;
+- Prefer 6-20 nodes unless the subject is tiny or the user requests high detail.
+
+ANTI-CLUTTER RULES:
+- NEVER connect more than 4-5 edges to a single node. Add an intermediate grouping node if needed.
+- Merge parallel edges between the same two nodes into one edge with a combined label.
+- For things with many sub-items (e.g. API with many routes, folder with many files): represent as ONE parent node, not individual nodes for each item.`;
 
 const JSON_SYSTEM_PROMPT = `You are an expert at creating architecture/flowchart diagrams using exai JSON format.
 
@@ -104,11 +128,14 @@ export interface CallLLMOptions {
     temperature?: number;
     verbose?: boolean;
     useCache?: boolean;
-    cacheOptions?: CacheOptions;
     /** Cache format key - used to separate cache namespaces (default: 'text') */
     cacheFormat?: string;
     /** Context string hashed into cache key for more precise cache hits */
     cacheContext?: string;
+    /** Request timeout in milliseconds (default: 120000 = 2 min) */
+    timeoutMs?: number;
+    /** If true, only return from cache — never call the API. Throws on miss. */
+    cacheOnly?: boolean;
 }
 
 export interface GenerateOptions {
@@ -118,13 +145,16 @@ export interface GenerateOptions {
     context?: string;
     verbose?: boolean;
     useCache?: boolean;
-    cacheOptions?: CacheOptions;
+    timeoutMs?: number;
+    /** If true, only return from cache — never call the API. Throws on miss. */
+    cacheOnly?: boolean;
 }
 
 interface DslPlanNode {
     id?: string;
     type?: string;
     label?: string;
+    color?: string;
 }
 
 interface DslPlanEdge {
@@ -146,8 +176,9 @@ interface DslPlan {
 
 interface NormalizedDslNode {
     id: string;
-    type: 'rectangle' | 'diamond' | 'ellipse' | 'database';
+    type: string; // semantic kind or shape type
     label: string;
+    color?: string; // optional background hex from LLM
 }
 
 interface NormalizedDslEdge {
@@ -194,43 +225,62 @@ export async function callLLM(
     const system = systemPrompt || 'You are a helpful assistant.';
     const useCache = options.useCache !== false;
     const cacheFormat = options.cacheFormat || 'text';
+    const cacheOnly = options.cacheOnly === true;
 
     // Check cache
-    if (useCache) {
-        const cached = getCachedResponse(
-            userPrompt, model, temperature, cacheFormat,
-            options.cacheContext,
-            { ...options.cacheOptions, verbose: options.verbose }
-        );
+    if (useCache || cacheOnly) {
+        const cached = getCachedResponse(userPrompt, model, temperature, cacheFormat, options.cacheContext);
         if (cached) {
             if (options.verbose) console.log(`  Cache hit (${cacheFormat})`);
             return cached;
         }
     }
 
+    // cacheOnly: do not call API, signal miss to caller
+    if (cacheOnly) {
+        throw new Error(`CACHE_MISS:${cacheFormat}`);
+    }
+
+    const timeoutMs = options.timeoutMs ?? 120_000;
+
     if (options.verbose) {
         console.log(`  Calling ${model}...`);
         console.log(`  Temperature: ${temperature}`);
         console.log(`  Prompt size: ${(userPrompt.length / 1024).toFixed(1)}KB`);
+        console.log(`  Timeout: ${timeoutMs / 1000}s`);
     }
 
-    const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-            'HTTP-Referer': 'https://github.com/KailasMahavarkar/exai',
-            'X-Title': 'exai',
-        },
-        body: JSON.stringify({
-            model,
-            temperature,
-            messages: [
-                { role: 'system', content: system },
-                { role: 'user', content: userPrompt },
-            ],
-        }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+        response = await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+                'HTTP-Referer': 'https://github.com/KailasMahavarkar/exai',
+                'X-Title': 'exai',
+            },
+            body: JSON.stringify({
+                model,
+                temperature,
+                messages: [
+                    { role: 'system', content: system },
+                    { role: 'user', content: userPrompt },
+                ],
+            }),
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+            throw new Error(`LLM request timed out after ${timeoutMs / 1000}s (model: ${model}). Try a faster model or increase the timeout.`);
+        }
+        throw err;
+    } finally {
+        clearTimeout(timer);
+    }
 
     if (!response.ok) {
         const error = await response.text();
@@ -250,11 +300,7 @@ export async function callLLM(
 
     // Cache response
     if (useCache) {
-        cacheResponse(
-            userPrompt, model, temperature, cacheFormat,
-            output, options.cacheContext,
-            { ...options.cacheOptions, verbose: options.verbose }
-        );
+        cacheResponse(userPrompt, model, temperature, cacheFormat, output, options.cacheContext);
     }
 
     return output;
@@ -304,9 +350,10 @@ Remember: Base your diagram ONLY on the code provided between the BEGIN/END mark
             temperature: options.temperature,
             verbose: options.verbose,
             useCache: options.useCache,
-            cacheOptions: options.cacheOptions,
             cacheFormat: 'dsl-plan',
             cacheContext: options.context,
+            timeoutMs: options.timeoutMs,
+            cacheOnly: options.cacheOnly,
         });
 
         if (options.verbose) console.log(`  Rebuilding DSL from normalized plan...`);
@@ -326,9 +373,10 @@ Remember: Base your diagram ONLY on the code provided between the BEGIN/END mark
         temperature: options.temperature,
         verbose: options.verbose,
         useCache: options.useCache,
-        cacheOptions: options.cacheOptions,
         cacheFormat: format,
         cacheContext: options.context,
+        timeoutMs: options.timeoutMs,
+        cacheOnly: options.cacheOnly,
     });
 
     if (options.verbose) console.log(`  Cleaning and validating output...`);
@@ -362,14 +410,21 @@ function normalizeDirection(value: string | undefined): 'TB' | 'BT' | 'LR' | 'RL
     return dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL' ? dir : undefined;
 }
 
-function normalizeNodeType(value: string | undefined): 'rectangle' | 'diamond' | 'ellipse' | 'database' {
+// Semantic kinds the DSL parser understands — pass them through as-is for automatic color styling.
+const SEMANTIC_KINDS = new Set([
+    'frontend', 'backend', 'api', 'service', 'worker',
+    'db', 'database', 'storage', 'queue', 'mq', 'broker', 'cache',
+    'external', 'user', 'orchestrator', 'hub', 'router',
+    'diamond', 'decision', 'condition',
+    'ellipse', 'oval', 'start', 'end',
+    'rectangle', 'process', 'cylinder',
+]);
+
+function normalizeNodeType(value: string | undefined): string {
     if (!value) return 'rectangle';
     const type = value.toLowerCase();
-
-    if (type === 'diamond' || type === 'decision' || type === 'condition') return 'diamond';
-    if (type === 'ellipse' || type === 'oval' || type === 'start' || type === 'end') return 'ellipse';
-    if (type === 'database' || type === 'db' || type === 'storage' || type === 'cylinder') return 'database';
-    return 'rectangle';
+    // Pass through any known semantic kind; unknown values fall back to rectangle
+    return SEMANTIC_KINDS.has(type) ? type : 'rectangle';
 }
 
 function sanitizeNodeLabel(label: string | undefined, fallback: string): string {
@@ -407,6 +462,7 @@ function normalizeDslPlan(plan: DslPlan): NormalizedDslPlan {
             id: nodeId,
             type: normalizeNodeType(rawNode.type),
             label: sanitizeNodeLabel(rawNode.label, fallbackLabel),
+            color: typeof rawNode.color === 'string' && rawNode.color.startsWith('#') ? rawNode.color : undefined,
         };
         nodes.push(node);
         nodeById.set(node.id, node);
@@ -492,7 +548,8 @@ function buildDslFromPlan(plan: NormalizedDslPlan): string {
         usedRefs.add(ref);
         nodeRefByOriginalId.set(node.id, ref);
 
-        lines.push(`@node ${ref} ${node.type} ${quoteDsl(node.label)}`);
+        const colorToken = node.color ? ` bg:${node.color}` : '';
+        lines.push(`@node ${ref} ${node.type} ${quoteDsl(node.label)}${colorToken}`);
     }
 
     if (plan.nodes.length > 0 && plan.edges.length > 0) {

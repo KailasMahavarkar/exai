@@ -45,6 +45,7 @@ export async function filterFolders(
   model: string = DEFAULT_MODEL,
   verbose: boolean = false,
   useCache: boolean = true,
+  timeoutMs?: number,
 ): Promise<FilterResult> {
   const startTime = Date.now();
 
@@ -57,6 +58,7 @@ export async function filterFolders(
     verbose,
     useCache,
     cacheFormat: 'folder-filter',
+    timeoutMs,
   });
 
   // Parse JSON output

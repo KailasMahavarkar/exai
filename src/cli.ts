@@ -18,7 +18,7 @@ import { layoutGraph } from './layout/elk-layout.js';
 import { generateExcalidraw, serializeExcalidraw } from './generator/excalidraw-generator.js';
 import { generateFlowchartInput, type OutputFormat } from './ai/openrouter.js';
 import { gatherContext } from './ai/context-gatherer.js';
-import { clearCache, getCacheStats } from './ai/query-cache.js';
+import { cache } from './ai/cache.js';
 import { loadConfig, CONFIG_TEMPLATE, type CliConfig } from './ai/config.js';
 import type { FlowchartGraph, FlowDirection } from './types/dsl.js';
 
@@ -355,7 +355,9 @@ program
     .option('--allow-test-files', 'Include test files in context (default: excluded)')
     .option('--no-compress', 'Disable context compression')
     .option('--compress-mode <mode>', 'Compression mode: balanced, aggressive, minimal (default: balanced)', 'balanced')
-    .option('--no-cache', 'Disable LLM response caching')
+    .option('--no-cache', 'Disable LLM response cache')
+    .option('--no-context-cache', 'Disable context-gather cache (re-gather files every run)')
+    .option('--redraw', 'Re-render using cached context + cached LLM response — no API call (fails if either cache is cold)')
     .option('--only-context', 'Only gather and display context, do not generate diagram')
     .option('--config-path <path>', 'Path to config JSON file')
     .option('--verbose', 'Verbose output')
@@ -366,6 +368,13 @@ program
             // Load config file if provided and merge with CLI options
             // Priority: CLI flags > env/.env > config file > hardcoded defaults
             let config: CliConfig = {};
+            const DEFAULT_CONFIG_NAME = 'exai.config.json';
+            const autoConfigPath = resolve(DEFAULT_CONFIG_NAME);
+            let configAutoDetected = false;
+            if (!options.configPath && existsSync(autoConfigPath)) {
+                options.configPath = autoConfigPath;
+                configAutoDetected = true;
+            }
             if (options.configPath) {
                 config = loadConfig(options.configPath);
 
@@ -393,14 +402,27 @@ program
 
                 // Cache
                 if (config.cache !== undefined && src('cache') !== 'cli') options.cache = config.cache;
+                if (config.contextCache !== undefined && src('contextCache') !== 'cli') options.contextCache = config.contextCache;
 
                 // Misc
                 if (config.verbose !== undefined && src('verbose') !== 'cli') options.verbose = config.verbose;
 
                 if (options.verbose) {
-                    console.log(`📄 Config loaded from: ${resolve(options.configPath)}`);
+                    const label = configAutoDetected ? '📄 Config auto-detected' : '📄 Config loaded';
+                    console.log(`${label}: ${resolve(options.configPath)}`);
+                    const applied = Object.keys(config).filter(k => k !== 'apiKey');
+                    if (applied.length > 0) {
+                        console.log(`   Keys applied: ${applied.join(', ')}`);
+                    }
                 }
             }
+
+            // Configure the shared cache singleton (TTL, maxEntries, verbose)
+            cache.configure({
+                ttlDays: config.cacheTtlDays,
+                maxEntries: config.cacheMaxEntries,
+                verbose: options.verbose,
+            });
 
             const format = options.format as OutputFormat;
 
@@ -448,6 +470,12 @@ program
             }
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
+            // --redraw requires context paths
+            if (options.redraw && (!options.context || options.context.length === 0)) {
+                console.error('Error: --redraw requires at least one context path via -c or config "context".');
+                process.exit(1);
+            }
+
             // Gather context if provided
             let contextString: string | undefined;
             if (options.onlyContext && options.context.length === 0) {
@@ -456,7 +484,8 @@ program
             }
             if (options.context && options.context.length > 0) {
                 try {
-                    console.log('📂 [1/5] Gathering Context...');
+                    const isRedraw = options.redraw === true;
+                    console.log(`📂 [1/5] ${isRedraw ? 'Loading Context from cache...' : 'Gathering Context...'}`);
 
                     if (options.verbose) {
                         console.log(`  CLI received context paths:`);
@@ -472,46 +501,51 @@ program
                         ? { ...modeDefaults, ...config.compressOptions }
                         : modeDefaults;
 
+                    // context cache: disabled by --no-context-cache, forced cache-only by --redraw
+                    const useContextCache = options.contextCache !== false && !isRedraw;
+                    const contextCacheOnly = isRedraw;
+
                     const contextResult = await gatherContext(options.context, {
                         apiKey: options.apiKey,
                         filterModel: config.filterModel,
                         verbose: options.verbose,
                         compress: options.compress !== false,
                         compressOptions: compressionOptions,
-                        useCache: options.cache !== false,
+                        useCache: useContextCache,
+                        cacheOnly: contextCacheOnly,
                         excludePatterns: options.exclude,
                         allowTestFiles: options.allowTestFiles ?? false,
                         maxFileSize: config.maxFileSize,
                         maxDepth: config.maxDepth,
                         maxTreeItems: config.maxTreeItems,
-                        cacheTtlDays: config.cacheTtlDays,
-                        cacheMaxEntries: config.cacheMaxEntries,
+                        timeoutMs: config.timeoutSecs !== undefined ? config.timeoutSecs * 1000 : undefined,
                     });
+
+                    if (contextResult === null) {
+                        console.error('❌ --redraw failed: context cache is cold for these paths.');
+                        console.error('   Run without --redraw first to populate the cache.');
+                        process.exit(1);
+                    }
+
                     contextString = contextResult.markdown;
 
                     const contextTime = Date.now() - contextStart;
-                    let contextMsg = `✓ Context gathered (${(contextString.length / 1024).toFixed(1)}KB in ${contextTime}ms)`;
+                    let contextMsg = `✓ Context ${contextResult.fromCache ? '[CACHE]' : 'gathered'} (${(contextString.length / 1024).toFixed(1)}KB in ${contextTime}ms)`;
 
                     if (contextResult.compression && options.compress !== false) {
                         contextMsg += ` - ${contextResult.compression.ratio.toFixed(1)}% compression`;
-                    }
-
-                    if (contextResult.fromCache) {
-                        contextMsg += ` [FROM CACHE]`;
                     }
 
                     console.log(contextMsg);
 
                     if (options.verbose) {
                         const t = contextResult.timing;
-                        let summary = `Context gathering: ${(contextString.length / 1024).toFixed(1)}KB `;
+                        let summary = `Context: ${(contextString.length / 1024).toFixed(1)}KB `;
                         if (contextResult.compression) {
                             summary += `(${contextResult.compression.ratio.toFixed(1)}% compressed) `;
                         }
                         summary += `(tree: ${t.treeMs}ms, filter: ${t.filterMs}ms, read: ${t.readMs}ms`;
-                        if (t.compressMs) {
-                            summary += `, compress: ${t.compressMs}ms`;
-                        }
+                        if (t.compressMs) summary += `, compress: ${t.compressMs}ms`;
                         summary += `)`;
                         console.log(`  ${summary}`);
                         console.log(`  Cache key: ${contextResult.cacheKey}`);
@@ -528,7 +562,7 @@ program
                         console.log(`✅ Context gathering complete!`);
                         console.log(`📦 Size: ${(contextString.length / 1024).toFixed(1)}KB`);
                         if (contextResult.cacheKey) {
-                            const cachePath = join(tmpdir(), 'exai-cache', contextResult.cacheKey);
+                            const cachePath = join(tmpdir(), 'exai-cache', `context__${contextResult.cacheKey}.json`);
                             console.log(`🔑 Cache key: ${contextResult.cacheKey}`);
                             console.log(`📁 Cache path: ${cachePath}`);
                         }
@@ -541,25 +575,35 @@ program
                 }
             }
 
-            // Generate input using AI
-            console.log('🤖 [2/5] Calling AI to generate flowchart...');
+            // Generate input using AI (or load from LLM cache on --redraw)
+            const isRedraw = options.redraw === true;
+            console.log(`🤖 [2/5] ${isRedraw ? 'Loading diagram from LLM cache...' : 'Calling AI to generate flowchart...'}`);
             const aiStart = Date.now();
 
-            const input = await generateFlowchartInput(prompt, format, {
-                model: options.model,
-                apiKey: options.apiKey,
-                temperature,
-                context: contextString,
-                verbose: options.verbose,
-                useCache: options.cache !== false,
-                cacheOptions: {
-                    ttlDays: config.cacheTtlDays,
-                    maxEntries: config.cacheMaxEntries,
-                },
-            });
+            let input: string;
+            try {
+                input = await generateFlowchartInput(prompt, format, {
+                    model: options.model,
+                    apiKey: options.apiKey,
+                    temperature,
+                    context: contextString,
+                    verbose: options.verbose,
+                    useCache: options.cache !== false,
+                    cacheOnly: isRedraw,
+                    timeoutMs: config.timeoutSecs !== undefined ? config.timeoutSecs * 1000 : undefined,
+                });
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                if (msg.startsWith('CACHE_MISS:')) {
+                    console.error('❌ --redraw failed: LLM cache is cold for this prompt + context.');
+                    console.error('   Run without --redraw first to populate the cache.');
+                    process.exit(1);
+                }
+                throw err;
+            }
 
             const aiTime = Date.now() - aiStart;
-            console.log(`✓ AI generation complete (${input.length} chars in ${aiTime}ms)`);
+            console.log(`✓ ${isRedraw ? 'Loaded from LLM cache' : 'AI generation complete'} (${input.length} chars in ${aiTime}ms)`);
 
             if (options.verbose) {
                 console.log(`\n${format.toUpperCase()} Output:`);
@@ -650,10 +694,10 @@ program
     .action((action) => {
         try {
             if (action === 'clear') {
-                const cleared = clearCache({ verbose: true });
+                const cleared = cache.clear();
                 console.log(`✓ Cleared ${cleared} cache entries`);
             } else if (action === 'stats') {
-                const stats = getCacheStats();
+                const stats = cache.stats();
                 console.log('Cache Statistics:');
                 console.log(`  Total Entries: ${stats.totalEntries}`);
                 console.log(`  Total Size: ${(stats.totalSize / 1024).toFixed(2)} KB`);

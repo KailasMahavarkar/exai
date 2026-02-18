@@ -9,6 +9,7 @@ import {
   createBaseElement,
   createNode,
   createArrow,
+  createArrowWithBindings,
   createText,
   createNodeLabel,
   createEdgeLabel,
@@ -19,6 +20,8 @@ import {
   generateFileId,
   getImageDimensions,
 } from '../factory/index.js';
+import { calculateStartBinding, calculateEndBinding, computeSharedBinding } from '../layout/arrow-router.js';
+import type { ExcalidrawArrowBinding } from '../types/excalidraw.js';
 import type {
   ExcalidrawFile,
   ExcalidrawElement,
@@ -275,6 +278,36 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
     }
   }
 
+  // Pre-compute shared bindings for nodes with multiple incoming/outgoing edges.
+  // When >1 edges share the same source or target, pin them all to the same
+  // face-center using mode:'point' so arrows bundle at one spot instead of fanning.
+  const incomingByTarget = new Map<string, LayoutedNode[]>();
+  const outgoingBySource = new Map<string, LayoutedNode[]>();
+  for (const edge of graph.edges) {
+    const src = nodeMap.get(edge.source);
+    const tgt = nodeMap.get(edge.target);
+    if (src && tgt) {
+      if (!incomingByTarget.has(edge.target)) incomingByTarget.set(edge.target, []);
+      incomingByTarget.get(edge.target)!.push(src);
+      if (!outgoingBySource.has(edge.source)) outgoingBySource.set(edge.source, []);
+      outgoingBySource.get(edge.source)!.push(tgt);
+    }
+  }
+  const sharedEndBinding = new Map<string, ExcalidrawArrowBinding>();
+  const sharedStartBinding = new Map<string, ExcalidrawArrowBinding>();
+  for (const [targetId, sources] of incomingByTarget) {
+    if (sources.length > 1) {
+      const targetNode = nodeMap.get(targetId);
+      if (targetNode) sharedEndBinding.set(targetId, computeSharedBinding(targetNode, sources));
+    }
+  }
+  for (const [sourceId, targets] of outgoingBySource) {
+    if (targets.length > 1) {
+      const sourceNode = nodeMap.get(sourceId);
+      if (sourceNode) sharedStartBinding.set(sourceId, computeSharedBinding(sourceNode, targets));
+    }
+  }
+
   // Create arrow elements for edges
   for (const edge of graph.edges) {
     const sourceNode = nodeMap.get(edge.source);
@@ -285,9 +318,24 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
       continue;
     }
 
+    // Use shared binding points when multiple edges share the same source/target
+    const startBinding = sharedStartBinding.get(edge.source)
+      ?? calculateStartBinding(sourceNode, targetNode).binding;
+    const endBinding = sharedEndBinding.get(edge.target)
+      ?? calculateEndBinding(sourceNode, targetNode).binding;
+
     // Create arrow with bound text if it has a label
     const boundElements = edge.label ? [{ id: `text-${edge.id}`, type: 'text' as const }] : undefined;
-    const arrowElement = createArrow(edge, sourceNode, targetNode, boundElements);
+    const arrowElement = createArrowWithBindings(
+      edge.id,
+      edge.sourcePoint.x,
+      edge.sourcePoint.y,
+      edge.points,
+      startBinding,
+      endBinding,
+      boundElements,
+      edge.style,
+    );
     elements.push(arrowElement);
 
     // Create text label for the edge if it has one

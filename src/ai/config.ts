@@ -57,12 +57,15 @@ export interface CliConfig {
     compressOptions?: ConfigCompressOptions;
 
     // Cache
-    cache?: boolean;
+    cache?: boolean;          // LLM response cache
+    contextCache?: boolean;   // context-gather cache (independent of LLM cache)
     cacheTtlDays?: number;
     cacheMaxEntries?: number;
 
     // Misc
     verbose?: boolean;
+    /** LLM request timeout in seconds (default: 120) */
+    timeoutSecs?: number;
 }
 
 // ── Validation helpers ──────────────────────────────────────────────────────
@@ -77,9 +80,9 @@ const KNOWN_KEYS = new Set<string>([
     // Compression
     'compress', 'compressMode', 'compressOptions',
     // Cache
-    'cache', 'cacheTtlDays', 'cacheMaxEntries',
+    'cache', 'contextCache', 'cacheTtlDays', 'cacheMaxEntries',
     // Misc
-    'verbose',
+    'verbose', 'timeoutSecs',
 ]);
 
 const COMPRESS_OPTION_KEYS = new Set<string>([
@@ -210,11 +213,13 @@ export function loadConfig(configPath: string): CliConfig {
 
     // Cache
     if (obj.cache !== undefined) config.cache = assertBoolean(obj, 'cache');
+    if (obj.contextCache !== undefined) config.contextCache = assertBoolean(obj, 'contextCache');
     if (obj.cacheTtlDays !== undefined) config.cacheTtlDays = assertNumber(obj, 'cacheTtlDays');
     if (obj.cacheMaxEntries !== undefined) config.cacheMaxEntries = assertNumber(obj, 'cacheMaxEntries');
 
     // Misc
     if (obj.verbose !== undefined) config.verbose = assertBoolean(obj, 'verbose');
+    if (obj.timeoutSecs !== undefined) config.timeoutSecs = assertNumber(obj, 'timeoutSecs');
 
     return config;
 }
@@ -267,4 +272,5 @@ export const CONFIG_TEMPLATE: CliConfig = {
 
     // Misc
     verbose: false,
+    timeoutSecs: 120,
 };

@@ -125,3 +125,31 @@ export function calculateEndBinding(
   const result = findEdgeConnectionPoint(targetNode, sourceCenter);
   return { point: { x: result.x, y: result.y }, binding: result.binding };
 }
+
+/**
+ * Compute a single shared binding point on a node for multiple neighbors.
+ * Uses mode:'point' to pin all arrows to one spot instead of fanning across the border.
+ *
+ * Use this when a node has multiple incoming (or outgoing) edges so all those
+ * arrows converge to the same face-center rather than spreading around the perimeter.
+ */
+export function computeSharedBinding(
+  node: LayoutedNode,
+  neighborNodes: LayoutedNode[],
+): ExcalidrawArrowBinding {
+  // Average center of all neighbor nodes
+  let avgX = 0, avgY = 0;
+  for (const n of neighborNodes) {
+    avgX += n.x + n.width / 2;
+    avgY += n.y + n.height / 2;
+  }
+  avgX /= neighborNodes.length;
+  avgY /= neighborNodes.length;
+
+  const result = findEdgeConnectionPoint(node, { x: avgX, y: avgY });
+  return {
+    elementId: node.id,
+    mode: 'point',
+    fixedPoint: result.binding.fixedPoint,
+  };
+}

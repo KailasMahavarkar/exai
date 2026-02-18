@@ -3,18 +3,14 @@
  *
  * Responsibilities:
  * - Wraps the context module with OpenRouter-based AI filtering (folder-filter.ts)
- * - Caches full pipeline results keyed on paths + options
+ * - Caches full pipeline results keyed on paths + options (via unified ExaiCache)
  * - Forwards all options to the context module
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { createHash } from 'crypto';
-import { tmpdir } from 'os';
 import { validatePaths, gatherContext as gatherContextModule } from '../context/index.js';
 import type { GatherResult as ModuleGatherResult, CompressOptions, AiFilterFn } from '../context/index.js';
 import { filterFolders } from './folder-filter.js';
-
-const CACHE_DIR = `${tmpdir()}/exai-cache`;
+import { cache, makeKey } from './cache.js';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -33,10 +29,10 @@ export interface ContextOptions {
   maxDepth?: number;
   /** Max tree items before truncation (default: 1000) */
   maxTreeItems?: number;
-  /** Cache TTL in days (default: 7) */
-  cacheTtlDays?: number;
-  /** Max cache entries (default: 100) */
-  cacheMaxEntries?: number;
+  /** LLM request timeout in ms (default: 120000) */
+  timeoutMs?: number;
+  /** If true, only return from cache — never re-gather. Returns null on miss. */
+  cacheOnly?: boolean;
 }
 
 export interface ContextResult extends ModuleGatherResult {
@@ -44,10 +40,10 @@ export interface ContextResult extends ModuleGatherResult {
   cacheKey: string;
 }
 
-// ── Cache helpers ─────────────────────────────────────────────────────────────
+// ── Cache key ─────────────────────────────────────────────────────────────────
 
 function generateCacheKey(paths: string[], options: ContextOptions): string {
-  const keyParts = [
+  return makeKey(
     [...paths].sort().join('|'),
     options.compress ?? true,
     options.allowTestFiles ?? false,
@@ -56,31 +52,7 @@ function generateCacheKey(paths: string[], options: ContextOptions): string {
     options.maxTreeItems ?? 0,
     (options.excludePatterns ?? []).sort().join(','),
     JSON.stringify(options.compressOptions ?? {}),
-  ];
-  return createHash('sha256').update(keyParts.join(':::')).digest('hex') + '_ctx.cache';
-}
-
-function getCached(cacheKey: string, verbose: boolean): ModuleGatherResult | null {
-  try {
-    const cachePath = `${CACHE_DIR}/${cacheKey}`;
-    if (existsSync(cachePath)) {
-      if (verbose) console.log(`  Context cache hit: ${cacheKey}`);
-      return JSON.parse(readFileSync(cachePath, 'utf-8'));
-    }
-  } catch (error) {
-    if (verbose) console.log(`  Context cache read error: ${error}`);
-  }
-  return null;
-}
-
-function writeCache(cacheKey: string, result: ModuleGatherResult, verbose: boolean): void {
-  try {
-    if (!existsSync(CACHE_DIR)) mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(`${CACHE_DIR}/${cacheKey}`, JSON.stringify(result), 'utf-8');
-    if (verbose) console.log(`  Context cached: ${CACHE_DIR}/${cacheKey}`);
-  } catch (error) {
-    if (verbose) console.log(`  Context cache write error: ${error}`);
-  }
+  );
 }
 
 // ── AI filter factory ─────────────────────────────────────────────────────────
@@ -90,9 +62,10 @@ function createAiFilter(
   verbose: boolean = false,
   useCache: boolean = true,
   filterModel?: string,
+  timeoutMs?: number,
 ): AiFilterFn {
   return async (tree: string): Promise<string[]> => {
-    const result = await filterFolders(tree, apiKey, filterModel, verbose, useCache);
+    const result = await filterFolders(tree, apiKey, filterModel, verbose, useCache, timeoutMs);
     return result.excludePatterns;
   };
 }
@@ -106,7 +79,7 @@ function createAiFilter(
 export async function gatherContext(
   paths: string[],
   options: ContextOptions = {}
-): Promise<ContextResult> {
+): Promise<ContextResult | null> {
   const {
     apiKey,
     filterModel,
@@ -119,6 +92,8 @@ export async function gatherContext(
     maxFileSize,
     maxDepth,
     maxTreeItems,
+    timeoutMs,
+    cacheOnly = false,
   } = options;
 
   if (verbose) {
@@ -131,18 +106,23 @@ export async function gatherContext(
 
   // Check cache (key includes all options that affect output)
   const cacheKey = generateCacheKey(validatedPaths, options);
-  if (useCache) {
-    const cached = getCached(cacheKey, verbose);
+  if (useCache || cacheOnly) {
+    const cached = cache.get<ModuleGatherResult>('context', cacheKey);
     if (cached) {
       if (verbose) console.log(`  Using cached context (${(cached.markdown.length / 1024).toFixed(1)}KB)`);
       return { ...cached, fromCache: true, cacheKey };
     }
   }
 
+  // cacheOnly: do not re-gather, signal miss to caller
+  if (cacheOnly) {
+    return null;
+  }
+
   // Run full pipeline via context module
   const result = await gatherContextModule(validatedPaths, {
     excludePatterns,
-    aiFilter: createAiFilter(apiKey, verbose, useCache, filterModel),
+    aiFilter: createAiFilter(apiKey, verbose, useCache, filterModel, timeoutMs),
     compress,
     compressOptions,
     allowTestFiles,
@@ -156,7 +136,7 @@ export async function gatherContext(
 
   // Cache the full result
   if (useCache) {
-    writeCache(cacheKey, result, verbose);
+    cache.set('context', cacheKey, result);
   }
 
   return { ...result, fromCache: false, cacheKey };
