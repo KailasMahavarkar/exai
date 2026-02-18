@@ -9,6 +9,7 @@
 import { Command } from 'commander';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
+import { createRequire } from 'module';
 import { tmpdir } from 'os';
 import { parseDSL } from './parser/dsl-parser.js';
 import { parseJSONString } from './parser/json-parser.js';
@@ -40,6 +41,9 @@ export interface CompressionResult {
     filesProcessed: number;
 }
 
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
 
 const program = new Command();
 const EXAI_API_KEY_ENV = 'EXAI_OPENROUTER_APIKEY';
@@ -157,7 +161,7 @@ function resolveApiKey(optionsApiKey: string | undefined, configApiKey: string |
 program
     .name('exai')
     .description('Create Excalidraw flowcharts from DSL, JSON, or DOT')
-    .version('1.0.1');
+    .version(pkg.version);
 
 /**
  * Create command - main flowchart creation
