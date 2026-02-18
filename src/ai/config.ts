@@ -229,6 +229,7 @@ export const CONFIG_TEMPLATE: CliConfig = {
     // AI / LLM
     model: 'moonshotai/kimi-k2.5',
     filterModel: 'moonshotai/kimi-k2.5',
+    apiKey: "<Set EXAI_OPENROUTER_APIKEY in .env or paste locally. Warning!! Do not commit this file with apiKey>",
     temperature: 0,
 
     // Output
