@@ -27,6 +27,10 @@ coverage/
 
 # Config files (may contain API keys)
 exai.config.json
+exai.json
+
+# Dev scratch files
+example.ts
 
 # Temporary files
 *.tmp
