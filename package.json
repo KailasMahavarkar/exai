@@ -1,6 +1,6 @@
 {
   "name": "exai",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "AI-powered CLI for creating Excalidraw flowcharts from natural language",
   "type": "module",
   "main": "dist/index.js",
