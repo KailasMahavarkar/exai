@@ -267,6 +267,7 @@ export const CONFIG_TEMPLATE: CliConfig = {
 
     // Cache
     cache: true,
+    contextCache: true,
     cacheTtlDays: 7,
     cacheMaxEntries: 100,
 
