@@ -270,21 +270,29 @@ program
 program
     .command('parse')
     .description('Parse and validate input without generating output')
-    .argument('<input>', 'Input file path')
+    .argument('[input]', 'Input file path')
     .option('-f, --format <type>', 'Input format: dsl, json, dot (default: dsl)', 'dsl')
+    .option('--inline <dsl>', 'Inline DSL/DOT string')
+    .option('--stdin', 'Read input from stdin')
     .action((inputFile, options, command) => {
         try {
-            const input = readFileSync(inputFile, 'utf-8');
+            let input: string;
             let format = options.format;
             const formatExplicitlySet = command.getOptionValueSource('format') === 'cli';
 
-            // Auto-detect format from file extension (only if --format not explicitly set)
-            if (!formatExplicitlySet) {
-                if (inputFile.endsWith('.json')) {
-                    format = 'json';
-                } else if (inputFile.endsWith('.dot') || inputFile.endsWith('.gv')) {
-                    format = 'dot';
+            if (options.inline) {
+                input = options.inline;
+            } else if (options.stdin) {
+                input = readFileSync(0, 'utf-8');
+            } else if (inputFile) {
+                input = readFileSync(inputFile, 'utf-8');
+                if (!formatExplicitlySet) {
+                    if (inputFile.endsWith('.json')) format = 'json';
+                    else if (inputFile.endsWith('.dot') || inputFile.endsWith('.gv')) format = 'dot';
                 }
+            } else {
+                console.error('Error: No input provided. Use --inline, --stdin, or provide an input file.');
+                process.exit(1);
             }
 
             // Parse input
@@ -300,6 +308,7 @@ program
             console.log('Parse successful!');
             console.log(`  Nodes: ${graph.nodes.length}`);
             console.log(`  Edges: ${graph.edges.length}`);
+            if (graph.groups?.length) console.log(`  Groups: ${graph.groups.length}`);
             console.log(`  Direction: ${graph.options.direction}`);
             console.log('\nNodes:');
             for (const node of graph.nodes) {
@@ -311,6 +320,15 @@ program
                 const targetNode = graph.nodes.find((n) => n.id === edge.target);
                 const label = edge.label ? ` "${edge.label}"` : '';
                 console.log(`  - ${sourceNode?.label} ->${label} ${targetNode?.label}`);
+            }
+            if (graph.groups?.length) {
+                console.log('\nGroups:');
+                for (const group of graph.groups) {
+                    const memberLabels = group.nodeIds
+                        .map((id) => graph.nodes.find((n) => n.id === id)?.label ?? id)
+                        .join(', ');
+                    console.log(`  - [${group.id}] "${group.label}" (${memberLabels})`);
+                }
             }
         } catch (error) {
             console.error('Parse error:', error instanceof Error ? error.message : error);
@@ -432,6 +450,10 @@ program
 
             // Gather context if provided
             let contextString: string | undefined;
+            if (options.onlyContext && options.context.length === 0) {
+                console.error('Error: --only-context requires at least one context path via -c or config "context".');
+                process.exit(1);
+            }
             if (options.context && options.context.length > 0) {
                 try {
                     console.log('📂 [1/5] Gathering Context...');
