@@ -32,3 +32,6 @@ exai.config.json
 *.tmp
 *.temp
 .claude/settings.local.json
+
+# genctx output
+genctx.context.md
