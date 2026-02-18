@@ -54,7 +54,7 @@ One file controls everything. Generate it with `exai init`.
   "direction": "TB",
   "spacing": 50,
 
-  "context": ["./src"],
+  "context": ["."],
   "exclude": ["dist", "coverage", "*.lock"],
   "allowTestFiles": false,
   "maxFileSize": 65536,
