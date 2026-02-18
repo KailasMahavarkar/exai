@@ -36,7 +36,7 @@ jobs:
 
       - name: Test CLI
         run: |
-          echo "(Start) -> [Process] -> (End)" | node dist/cli.js create --stdin -o /tmp/test.excalidraw
+          printf '@node start ellipse "Start"\n@node process rectangle "Process"\n@node end ellipse "End"\n@edge start process\n@edge process end\n' | node dist/cli.js create --stdin -o /tmp/test.excalidraw
           cat /tmp/test.excalidraw | head -20
 
   lint:
