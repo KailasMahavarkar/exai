@@ -16,7 +16,7 @@
     "test:run": "vitest run",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",
-    "release": "np",
+    "release": "np --no-publish",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
