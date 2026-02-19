@@ -335,6 +335,7 @@ export async function layoutGraph(graph: FlowchartGraph, verbose: boolean = fals
   if (layoutedImages.length > 0) result.images = layoutedImages;
   if (graph.scatter && graph.scatter.length > 0) result.scatter = graph.scatter;
   if (graph.library) result.library = graph.library;
+  if (graph.globalStyle) result.globalStyle = graph.globalStyle;
 
   return result;
 }

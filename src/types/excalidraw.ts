@@ -13,7 +13,7 @@ export type ExcalidrawElementType =
   | 'freedraw'
   | 'image';
 
-export type ExcalidrawFillStyle = 'solid' | 'hachure' | 'cross-hatch';
+export type ExcalidrawFillStyle = 'solid' | 'hachure' | 'cross-hatch' | 'dots' | 'dashed' | 'zigzag' | 'none';
 
 export type ExcalidrawStrokeStyle = 'solid' | 'dashed' | 'dotted';
 

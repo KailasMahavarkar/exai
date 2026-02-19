@@ -17,6 +17,18 @@ import { resolve, dirname, isAbsolute } from 'path';
 
 // ── Nested option types ─────────────────────────────────────────────────────
 
+export interface ExcalidrawStyleConfig {
+    strokeWidth?: 1 | 2 | 4;
+    fillStyle?: 'hachure' | 'cross-hatch' | 'solid' | 'dots' | 'dashed' | 'zigzag' | 'none';
+    strokeStyle?: 'solid' | 'dashed' | 'dotted';
+    roughness?: 0 | 1 | 2;
+    edges?: 'round' | 'sharp';
+    arrowhead?: 'arrow' | 'bar' | 'dot' | 'triangle' | 'none';
+    fontFamily?: 'hand' | 'normal' | 'code' | 'excalifont';
+    fontSize?: number;
+    textAlign?: 'left' | 'center' | 'right';
+}
+
 export interface ConfigCompressOptions {
     removeComments?: boolean;
     minifyWhitespace?: boolean;
@@ -66,6 +78,9 @@ export interface CliConfig {
     verbose?: boolean;
     /** LLM request timeout in seconds (default: 120) */
     timeoutSecs?: number;
+
+    // Excalidraw visual style
+    excalidraw?: ExcalidrawStyleConfig;
 }
 
 // ── Validation helpers ──────────────────────────────────────────────────────
@@ -83,6 +98,8 @@ const KNOWN_KEYS = new Set<string>([
     'cache', 'contextCache', 'cacheTtlDays', 'cacheMaxEntries',
     // Misc
     'verbose', 'timeoutSecs',
+    // Excalidraw visual style
+    'excalidraw',
 ]);
 
 const COMPRESS_OPTION_KEYS = new Set<string>([
@@ -111,6 +128,72 @@ function assertStringArray(obj: Record<string, unknown>, key: string): string[] 
         throw new Error(`Config "${key}" must be an array of strings`);
     }
     return val as string[];
+}
+
+const EXCALIDRAW_STYLE_KEYS = new Set<string>([
+    'strokeWidth', 'fillStyle', 'strokeStyle', 'roughness',
+    'edges', 'arrowhead', 'fontFamily', 'fontSize', 'textAlign',
+]);
+
+function parseExcalidrawStyleConfig(obj: unknown): ExcalidrawStyleConfig {
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+        throw new Error('Config "excalidraw" must be an object');
+    }
+
+    const raw = obj as Record<string, unknown>;
+    const unknowns = Object.keys(raw).filter(k => !EXCALIDRAW_STYLE_KEYS.has(k));
+    if (unknowns.length > 0) {
+        console.warn(`Warning: Unknown excalidraw style keys ignored: ${unknowns.join(', ')}`);
+    }
+
+    const result: ExcalidrawStyleConfig = {};
+
+    if (raw.strokeWidth !== undefined) {
+        const v = assertNumber(raw, 'strokeWidth');
+        if (v === 1 || v === 2 || v === 4) result.strokeWidth = v;
+        else console.warn(`Warning: excalidraw.strokeWidth must be 1, 2, or 4. Got: ${v}`);
+    }
+    if (raw.fillStyle !== undefined) {
+        const v = assertString(raw, 'fillStyle');
+        const valid = ['hachure', 'cross-hatch', 'solid', 'dots', 'dashed', 'zigzag', 'none'];
+        if (valid.includes(v)) result.fillStyle = v as ExcalidrawStyleConfig['fillStyle'];
+        else console.warn(`Warning: excalidraw.fillStyle "${v}" is not valid. Options: ${valid.join(', ')}`);
+    }
+    if (raw.strokeStyle !== undefined) {
+        const v = assertString(raw, 'strokeStyle');
+        if (v === 'solid' || v === 'dashed' || v === 'dotted') result.strokeStyle = v;
+        else console.warn(`Warning: excalidraw.strokeStyle "${v}" is not valid`);
+    }
+    if (raw.roughness !== undefined) {
+        const v = assertNumber(raw, 'roughness');
+        if (v === 0 || v === 1 || v === 2) result.roughness = v;
+        else console.warn(`Warning: excalidraw.roughness must be 0, 1, or 2. Got: ${v}`);
+    }
+    if (raw.edges !== undefined) {
+        const v = assertString(raw, 'edges');
+        if (v === 'round' || v === 'sharp') result.edges = v;
+        else console.warn(`Warning: excalidraw.edges "${v}" is not valid. Use 'round' or 'sharp'`);
+    }
+    if (raw.arrowhead !== undefined) {
+        const v = assertString(raw, 'arrowhead');
+        const valid = ['arrow', 'bar', 'dot', 'triangle', 'none'];
+        if (valid.includes(v)) result.arrowhead = v as ExcalidrawStyleConfig['arrowhead'];
+        else console.warn(`Warning: excalidraw.arrowhead "${v}" is not valid. Options: ${valid.join(', ')}`);
+    }
+    if (raw.fontFamily !== undefined) {
+        const v = assertString(raw, 'fontFamily');
+        const valid = ['hand', 'normal', 'code', 'excalifont'];
+        if (valid.includes(v)) result.fontFamily = v as ExcalidrawStyleConfig['fontFamily'];
+        else console.warn(`Warning: excalidraw.fontFamily "${v}" is not valid. Options: ${valid.join(', ')}`);
+    }
+    if (raw.fontSize !== undefined) result.fontSize = assertNumber(raw, 'fontSize');
+    if (raw.textAlign !== undefined) {
+        const v = assertString(raw, 'textAlign');
+        if (v === 'left' || v === 'center' || v === 'right') result.textAlign = v;
+        else console.warn(`Warning: excalidraw.textAlign "${v}" is not valid`);
+    }
+
+    return result;
 }
 
 function parseCompressOptions(obj: unknown): ConfigCompressOptions {
@@ -221,6 +304,9 @@ export function loadConfig(configPath: string): CliConfig {
     if (obj.verbose !== undefined) config.verbose = assertBoolean(obj, 'verbose');
     if (obj.timeoutSecs !== undefined) config.timeoutSecs = assertNumber(obj, 'timeoutSecs');
 
+    // Excalidraw visual style
+    if (obj.excalidraw !== undefined) config.excalidraw = parseExcalidrawStyleConfig(obj.excalidraw);
+
     return config;
 }
 
@@ -274,4 +360,17 @@ export const CONFIG_TEMPLATE: CliConfig = {
     // Misc
     verbose: false,
     timeoutSecs: 120,
+
+    // Excalidraw visual style (global defaults applied to every element)
+    excalidraw: {
+        strokeWidth: 2,
+        fillStyle: 'hachure',
+        strokeStyle: 'solid',
+        roughness: 1,
+        edges: 'round',
+        arrowhead: 'arrow',
+        fontFamily: 'hand',
+        fontSize: 20,
+        textAlign: 'center',
+    },
 };

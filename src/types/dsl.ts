@@ -12,7 +12,7 @@ export type ArrowheadType = 'arrow' | 'bar' | 'dot' | 'triangle' | null;
 
 export type StrokeStyle = 'solid' | 'dashed' | 'dotted';
 
-export type FillStyle = 'solid' | 'hachure' | 'cross-hatch';
+export type FillStyle = 'solid' | 'hachure' | 'cross-hatch' | 'dots' | 'dashed' | 'zigzag' | 'none';
 
 /**
  * Node style configuration
@@ -28,6 +28,8 @@ export interface NodeStyle {
   fontFamily?: number;
   textColor?: string;
   roughness?: number;
+  textAlign?: 'left' | 'center' | 'right';
+  roundEdges?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ export interface EdgeStyle {
   startArrowhead?: ArrowheadType;
   endArrowhead?: ArrowheadType;
   roughness?: number;
+  elbowed?: boolean;
 }
 
 /**
@@ -158,6 +161,21 @@ export interface ScatterConfig {
 }
 
 /**
+ * Global visual style applied to all elements (lowest priority, overridden by per-node/edge styles)
+ */
+export interface GlobalDiagramStyle {
+  strokeWidth?: number;
+  fillStyle?: FillStyle;
+  strokeStyle?: StrokeStyle;
+  roughness?: number;
+  roundEdges?: boolean;
+  endArrowhead?: ArrowheadType;
+  fontFamily?: number;
+  fontSize?: number;
+  textAlign?: 'left' | 'center' | 'right';
+}
+
+/**
  * Complete flowchart graph representation
  */
 export interface FlowchartGraph {
@@ -168,6 +186,7 @@ export interface FlowchartGraph {
   images?: PositionedImage[]; // @image directives
   scatter?: ScatterConfig[]; // @scatter directives
   library?: string; // @library path
+  globalStyle?: GlobalDiagramStyle; // @style directives
 }
 
 /**
@@ -254,4 +273,5 @@ export interface LayoutedGraph {
   images?: LayoutedImage[]; // Resolved positioned images
   scatter?: ScatterConfig[]; // Scatter configs for post-layout generation
   library?: string; // Library path
+  globalStyle?: GlobalDiagramStyle; // Global style from @style directives
 }

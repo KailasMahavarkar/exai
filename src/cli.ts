@@ -19,8 +19,8 @@ import { generateExcalidraw, serializeExcalidraw } from './generator/excalidraw-
 import { generateFlowchartInput, type OutputFormat } from './ai/openrouter.js';
 import { gatherContext } from './ai/context-gatherer.js';
 import { cache } from './ai/cache.js';
-import { loadConfig, CONFIG_TEMPLATE, type CliConfig } from './ai/config.js';
-import type { FlowchartGraph, FlowDirection } from './types/dsl.js';
+import { loadConfig, CONFIG_TEMPLATE, type CliConfig, type ExcalidrawStyleConfig } from './ai/config.js';
+import type { FlowchartGraph, FlowDirection, GlobalDiagramStyle } from './types/dsl.js';
 
 export interface CompressionOptions {
     removeComments?: boolean;
@@ -132,6 +132,34 @@ function readApiKeysFromDotEnv(envPath: string = resolve('.env')): { exai?: stri
     }
 }
 
+const FONT_FAMILY_CONFIG_MAP: Record<string, number> = {
+    hand: 1,
+    normal: 2,
+    code: 3,
+    excalifont: 5,
+};
+
+/**
+ * Convert ExcalidrawStyleConfig (from config file) to GlobalDiagramStyle (used by generator)
+ */
+function excalidrawConfigToGlobalStyle(cfg: ExcalidrawStyleConfig): GlobalDiagramStyle {
+    const result: GlobalDiagramStyle = {};
+    if (cfg.strokeWidth !== undefined) result.strokeWidth = cfg.strokeWidth;
+    if (cfg.fillStyle !== undefined) result.fillStyle = cfg.fillStyle;
+    if (cfg.strokeStyle !== undefined) result.strokeStyle = cfg.strokeStyle;
+    if (cfg.roughness !== undefined) result.roughness = cfg.roughness;
+    if (cfg.edges !== undefined) result.roundEdges = cfg.edges === 'round';
+    if (cfg.arrowhead !== undefined) {
+        result.endArrowhead = cfg.arrowhead === 'none' ? null : cfg.arrowhead;
+    }
+    if (cfg.fontFamily !== undefined) {
+        result.fontFamily = FONT_FAMILY_CONFIG_MAP[cfg.fontFamily] ?? 5;
+    }
+    if (cfg.fontSize !== undefined) result.fontSize = cfg.fontSize;
+    if (cfg.textAlign !== undefined) result.textAlign = cfg.textAlign;
+    return result;
+}
+
 function resolveApiKey(optionsApiKey: string | undefined, configApiKey: string | undefined, command: Command): {
     apiKey?: string;
     source?: '--api-key' | 'EXAI_OPENROUTER_APIKEY' | 'OPENROUTER_API_KEY' | 'config';
@@ -176,12 +204,34 @@ program
     .option('--stdin', 'Read input from stdin')
     .option('-d, --direction <dir>', 'Flow direction: TB, BT, LR, RL (default: TB)')
     .option('-s, --spacing <n>', 'Node spacing in pixels', '50')
+    .option('--config-path <path>', 'Path to config JSON file (reads excalidraw style block only)')
     .option('--verbose', 'Verbose output')
     .action(async (inputFile, options, command) => {
         try {
             let input: string;
             let format = options.format;
             const formatExplicitlySet = command.getOptionValueSource('format') === 'cli';
+
+            // Load config for excalidraw style (auto-detect if not specified)
+            let createGlobalStyle: GlobalDiagramStyle | undefined;
+            {
+                const DEFAULT_CONFIG_NAME = 'exai.config.json';
+                const autoConfigPath = resolve(DEFAULT_CONFIG_NAME);
+                const configPath = options.configPath || (existsSync(autoConfigPath) ? autoConfigPath : undefined);
+                if (configPath) {
+                    try {
+                        const cfg = loadConfig(configPath);
+                        if (cfg.excalidraw) {
+                            createGlobalStyle = excalidrawConfigToGlobalStyle(cfg.excalidraw);
+                        }
+                    } catch (err) {
+                        if (options.configPath) {
+                            // Only throw if explicitly specified
+                            throw err;
+                        }
+                    }
+                }
+            }
 
             // Get input from various sources
             if (options.inline) {
@@ -246,7 +296,7 @@ program
             }
 
             // Generate Excalidraw file
-            const excalidrawFile = generateExcalidraw(layoutedGraph);
+            const excalidrawFile = generateExcalidraw(layoutedGraph, createGlobalStyle);
             const output = serializeExcalidraw(excalidrawFile);
 
             // Write output
@@ -657,7 +707,9 @@ program
             console.log('🎨 [5/5] Generating Excalidraw file...');
             const genStart = Date.now();
 
-            const excalidrawFile = generateExcalidraw(layoutedGraph);
+            // Convert config excalidraw style to global style override (lowest priority)
+            const aiGlobalStyle = config.excalidraw ? excalidrawConfigToGlobalStyle(config.excalidraw) : undefined;
+            const excalidrawFile = generateExcalidraw(layoutedGraph, aiGlobalStyle);
             const output = serializeExcalidraw(excalidrawFile);
 
             const genTime = Date.now() - genStart;

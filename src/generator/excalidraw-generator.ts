@@ -35,6 +35,9 @@ import type {
   LayoutedImage,
   ScatterConfig,
   DecorationAnchor,
+  GlobalDiagramStyle,
+  NodeStyle,
+  EdgeStyle,
 } from '../types/dsl.js';
 
 const SOURCE_URL = 'https://github.com/KailasMahavarkar/exai';
@@ -117,11 +120,50 @@ function sanitizeGroupId(id: string): string {
 }
 
 /**
- * Generate an Excalidraw file from a layouted graph
+ * Convert global diagram style to NodeStyle fields
  */
-export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
+function globalToNodeStyle(g: GlobalDiagramStyle): NodeStyle {
+  const style: NodeStyle = {};
+  if (g.strokeWidth !== undefined) style.strokeWidth = g.strokeWidth;
+  if (g.fillStyle !== undefined) style.fillStyle = g.fillStyle;
+  if (g.strokeStyle !== undefined) style.strokeStyle = g.strokeStyle;
+  if (g.roughness !== undefined) style.roughness = g.roughness;
+  if (g.roundEdges !== undefined) style.roundEdges = g.roundEdges;
+  if (g.fontFamily !== undefined) style.fontFamily = g.fontFamily;
+  if (g.fontSize !== undefined) style.fontSize = g.fontSize;
+  if (g.textAlign !== undefined) style.textAlign = g.textAlign;
+  return style;
+}
+
+/**
+ * Convert global diagram style to EdgeStyle fields
+ */
+function globalToEdgeStyle(g: GlobalDiagramStyle): EdgeStyle {
+  const style: EdgeStyle = {};
+  if (g.strokeWidth !== undefined) style.strokeWidth = g.strokeWidth;
+  if (g.strokeStyle !== undefined) style.strokeStyle = g.strokeStyle;
+  if (g.roughness !== undefined) style.roughness = g.roughness;
+  if (g.endArrowhead !== undefined) style.endArrowhead = g.endArrowhead;
+  return style;
+}
+
+/**
+ * Generate an Excalidraw file from a layouted graph
+ * @param graph - The layouted graph to generate
+ * @param globalStyleOverride - Global style from config (lowest priority; overridden by DSL @style and per-node/edge styles)
+ */
+export function generateExcalidraw(graph: LayoutedGraph, globalStyleOverride?: GlobalDiagramStyle): ExcalidrawFile {
   // Reset index counter for fresh ordering
   resetIndexCounter();
+
+  // Compute effective global style: config override first, then DSL @style overrides config
+  const effectiveGlobal: GlobalDiagramStyle = {
+    ...(globalStyleOverride ?? {}),
+    ...(graph.globalStyle ?? {}),
+  };
+  const hasGlobalStyle = Object.keys(effectiveGlobal).length > 0;
+  const baseNodeStyle = hasGlobalStyle ? globalToNodeStyle(effectiveGlobal) : undefined;
+  const baseEdgeStyle = hasGlobalStyle ? globalToEdgeStyle(effectiveGlobal) : undefined;
 
   const elements: ExcalidrawElement[] = [];
   const files: Record<string, ExcalidrawFileData> = {};
@@ -228,19 +270,28 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
         elements.push(imageElement);
       }
     } else {
+      // Merge global style (lowest priority) with per-node style (highest priority)
+      const effectiveNodeStyle: NodeStyle | undefined = baseNodeStyle
+        ? { ...baseNodeStyle, ...(node.style ?? {}) }
+        : node.style;
+      const effectiveNode = effectiveNodeStyle !== node.style
+        ? { ...node, style: effectiveNodeStyle }
+        : node;
+
       // Create shape element
       const boundElements = nodeBoundElements.get(node.id);
       const groupIds = nodeGroupIds.get(node.id);
-      const shapeElement = createNode(node, boundElements, groupIds);
+      const shapeElement = createNode(effectiveNode, boundElements, groupIds);
       elements.push(shapeElement);
 
       // Create text label for the node
-      const textElement = createNodeLabel(node, {
+      const textElement = createNodeLabel(effectiveNode, {
         id: `text-${node.id}`,
         containerId: node.id,
-        fontSize: node.style?.fontSize,
-        fontFamily: node.style?.fontFamily,
-        strokeColor: node.style?.textColor,
+        fontSize: effectiveNodeStyle?.fontSize,
+        fontFamily: effectiveNodeStyle?.fontFamily,
+        textAlign: effectiveNodeStyle?.textAlign,
+        strokeColor: effectiveNodeStyle?.textColor,
         groupIds,
       });
       elements.push(textElement);
@@ -324,6 +375,11 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
     const endBinding = sharedEndBinding.get(edge.target)
       ?? calculateEndBinding(sourceNode, targetNode).binding;
 
+    // Merge global style (lowest priority) with per-edge style (highest priority)
+    const effectiveEdgeStyle: EdgeStyle | undefined = baseEdgeStyle
+      ? { ...baseEdgeStyle, ...(edge.style ?? {}) }
+      : edge.style;
+
     // Create arrow with bound text if it has a label
     const boundElements = edge.label ? [{ id: `text-${edge.id}`, type: 'text' as const }] : undefined;
     const arrowElement = createArrowWithBindings(
@@ -334,7 +390,7 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
       startBinding,
       endBinding,
       boundElements,
-      edge.style,
+      effectiveEdgeStyle,
     );
     elements.push(arrowElement);
 
@@ -346,7 +402,12 @@ export function generateExcalidraw(graph: LayoutedGraph): ExcalidrawFile {
         edge.sourcePoint.x,
         edge.sourcePoint.y,
         edge.id,
-        { id: `text-${edge.id}` }
+        {
+          id: `text-${edge.id}`,
+          fontSize: effectiveGlobal.fontSize,
+          fontFamily: effectiveGlobal.fontFamily,
+          textAlign: effectiveGlobal.textAlign,
+        }
       );
       elements.push(textElement);
     }
