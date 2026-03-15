@@ -6,8 +6,8 @@
  */
 
 import { getCachedResponse, cacheResponse } from './query-cache.js';
-import { DEFAULT_TEMPERATURE, resolveProvider } from "./contants.js"
-import type { ProviderPreset } from "./contants.js"
+import { DEFAULT_TEMPERATURE, resolveProvider } from './contants.js';
+import type { ProviderPreset } from './contants.js';
 
 // ── System Prompts ──────────────────────────────────────────────────────────
 
@@ -124,80 +124,80 @@ CRITICAL RULES:
 export type OutputFormat = 'dsl' | 'json';
 
 export interface CallLLMOptions {
-    model?: string;
-    apiKey?: string;
-    temperature?: number;
-    verbose?: boolean;
-    useCache?: boolean;
-    /** Cache format key - used to separate cache namespaces (default: 'text') */
-    cacheFormat?: string;
-    /** Context string hashed into cache key for more precise cache hits */
-    cacheContext?: string;
-    /** Request timeout in milliseconds (default: 120000 = 2 min) */
-    timeoutMs?: number;
-    /** If true, only return from cache — never call the API. Throws on miss. */
-    cacheOnly?: boolean;
-    /** Provider preset name or custom base URL */
-    provider?: string;
+  model?: string;
+  apiKey?: string;
+  temperature?: number;
+  verbose?: boolean;
+  useCache?: boolean;
+  /** Cache format key - used to separate cache namespaces (default: 'text') */
+  cacheFormat?: string;
+  /** Context string hashed into cache key for more precise cache hits */
+  cacheContext?: string;
+  /** Request timeout in milliseconds (default: 120000 = 2 min) */
+  timeoutMs?: number;
+  /** If true, only return from cache — never call the API. Throws on miss. */
+  cacheOnly?: boolean;
+  /** Provider preset name or custom base URL */
+  provider?: string;
 }
 
 export interface GenerateOptions {
-    model?: string;
-    apiKey?: string;
-    temperature?: number;
-    context?: string;
-    verbose?: boolean;
-    useCache?: boolean;
-    timeoutMs?: number;
-    /** If true, only return from cache — never call the API. Throws on miss. */
-    cacheOnly?: boolean;
-    /** Provider preset name or custom base URL */
-    provider?: string;
+  model?: string;
+  apiKey?: string;
+  temperature?: number;
+  context?: string;
+  verbose?: boolean;
+  useCache?: boolean;
+  timeoutMs?: number;
+  /** If true, only return from cache — never call the API. Throws on miss. */
+  cacheOnly?: boolean;
+  /** Provider preset name or custom base URL */
+  provider?: string;
 }
 
 interface DslPlanNode {
-    id?: string;
-    type?: string;
-    label?: string;
-    color?: string;
+  id?: string;
+  type?: string;
+  label?: string;
+  color?: string;
 }
 
 interface DslPlanEdge {
-    from?: string;
-    to?: string;
-    label?: string;
-    dashed?: boolean;
+  from?: string;
+  to?: string;
+  label?: string;
+  dashed?: boolean;
 }
 
 interface DslPlan {
-    nodes?: DslPlanNode[];
-    edges?: DslPlanEdge[];
-    options?: {
-        direction?: string;
-        spacing?: number;
-        nodeSpacing?: number;
-    };
+  nodes?: DslPlanNode[];
+  edges?: DslPlanEdge[];
+  options?: {
+    direction?: string;
+    spacing?: number;
+    nodeSpacing?: number;
+  };
 }
 
 interface NormalizedDslNode {
-    id: string;
-    type: string; // semantic kind or shape type
-    label: string;
-    color?: string; // optional background hex from LLM
+  id: string;
+  type: string; // semantic kind or shape type
+  label: string;
+  color?: string; // optional background hex from LLM
 }
 
 interface NormalizedDslEdge {
-    from: string;
-    to: string;
-    label?: string;
-    dashed: boolean;
+  from: string;
+  to: string;
+  label?: string;
+  dashed: boolean;
 }
 
 interface NormalizedDslPlan {
-    nodes: NormalizedDslNode[];
-    edges: NormalizedDslEdge[];
-    direction?: 'TB' | 'BT' | 'LR' | 'RL';
-    spacing?: number;
+  nodes: NormalizedDslNode[];
+  edges: NormalizedDslEdge[];
+  direction?: 'TB' | 'BT' | 'LR' | 'RL';
+  spacing?: number;
 }
 
 // ── callLLM (base) ─────────────────────────────────────────────────────────
@@ -209,113 +209,119 @@ interface NormalizedDslPlan {
  * Returns the raw response string - no cleaning or validation.
  */
 export async function callLLM(
-    userPrompt: string,
-    systemPrompt?: string,
-    options: CallLLMOptions = {}
+  userPrompt: string,
+  systemPrompt?: string,
+  options: CallLLMOptions = {}
 ): Promise<string> {
-    const preset: ProviderPreset = resolveProvider(options.provider);
+  const preset: ProviderPreset = resolveProvider(options.provider);
 
-    const apiKey =
-        options.apiKey ||
-        process.env.EXAI_OPENROUTER_APIKEY ||
-        process.env.OPENROUTER_API_KEY;
+  const apiKey =
+    options.apiKey || process.env.EXAI_OPENROUTER_APIKEY || process.env.OPENROUTER_API_KEY;
 
-    if (!apiKey && preset.authStyle === 'bearer') {
-        throw new Error(
-            `API key is required for ${preset.name}.\n` +
-            'Provide it via --api-key, EXAI_OPENROUTER_APIKEY in env/.env, or config "apiKey".'
-        );
+  if (!apiKey && preset.authStyle === 'bearer') {
+    throw new Error(
+      `API key is required for ${preset.name}.\n` +
+        'Provide it via --api-key, EXAI_OPENROUTER_APIKEY in env/.env, or config "apiKey".'
+    );
+  }
+
+  const model = options.model || process.env.OPENROUTER_MODEL || preset.defaultModel;
+  const temperature = options.temperature ?? DEFAULT_TEMPERATURE;
+  const system = systemPrompt || 'You are a helpful assistant.';
+  const useCache = options.useCache !== false;
+  const cacheFormat = options.cacheFormat || 'text';
+  const cacheOnly = options.cacheOnly === true;
+
+  // Check cache
+  if (useCache || cacheOnly) {
+    const cached = getCachedResponse(
+      userPrompt,
+      model,
+      temperature,
+      cacheFormat,
+      options.cacheContext
+    );
+    if (cached) {
+      if (options.verbose) console.log(`  Cache hit (${cacheFormat})`);
+      return cached;
     }
+  }
 
-    const model = options.model || process.env.OPENROUTER_MODEL || preset.defaultModel;
-    const temperature = options.temperature ?? DEFAULT_TEMPERATURE;
-    const system = systemPrompt || 'You are a helpful assistant.';
-    const useCache = options.useCache !== false;
-    const cacheFormat = options.cacheFormat || 'text';
-    const cacheOnly = options.cacheOnly === true;
+  // cacheOnly: do not call API, signal miss to caller
+  if (cacheOnly) {
+    throw new Error(`CACHE_MISS:${cacheFormat}`);
+  }
 
-    // Check cache
-    if (useCache || cacheOnly) {
-        const cached = getCachedResponse(userPrompt, model, temperature, cacheFormat, options.cacheContext);
-        if (cached) {
-            if (options.verbose) console.log(`  Cache hit (${cacheFormat})`);
-            return cached;
-        }
+  const timeoutMs = options.timeoutMs ?? 120_000;
+
+  if (options.verbose) {
+    console.log(`  Provider: ${preset.name} (${preset.baseUrl})`);
+    console.log(`  Calling ${model}...`);
+    console.log(`  Temperature: ${temperature}`);
+    console.log(`  Prompt size: ${(userPrompt.length / 1024).toFixed(1)}KB`);
+    console.log(`  Timeout: ${timeoutMs / 1000}s`);
+  }
+
+  // Build headers
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(preset.headers ?? {}),
+  };
+  if (preset.authStyle === 'bearer' && apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(preset.baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        temperature,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(
+        `LLM request timed out after ${timeoutMs / 1000}s (model: ${model}). Try a faster model or increase the timeout.`
+      );
     }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
-    // cacheOnly: do not call API, signal miss to caller
-    if (cacheOnly) {
-        throw new Error(`CACHE_MISS:${cacheFormat}`);
-    }
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`${preset.name} API error (${response.status}): ${error}`);
+  }
 
-    const timeoutMs = options.timeoutMs ?? 120_000;
+  if (options.verbose) console.log(`  Response received`);
 
-    if (options.verbose) {
-        console.log(`  Provider: ${preset.name} (${preset.baseUrl})`);
-        console.log(`  Calling ${model}...`);
-        console.log(`  Temperature: ${temperature}`);
-        console.log(`  Prompt size: ${(userPrompt.length / 1024).toFixed(1)}KB`);
-        console.log(`  Timeout: ${timeoutMs / 1000}s`);
-    }
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const output = data.choices?.[0]?.message?.content;
 
-    // Build headers
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(preset.headers ?? {}),
-    };
-    if (preset.authStyle === 'bearer' && apiKey) {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-    }
+  if (!output) {
+    throw new Error(`${preset.name} API returned empty response`);
+  }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Cache response
+  if (useCache) {
+    cacheResponse(userPrompt, model, temperature, cacheFormat, output, options.cacheContext);
+  }
 
-    let response: Response;
-    try {
-        response = await fetch(preset.baseUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                model,
-                temperature,
-                messages: [
-                    { role: 'system', content: system },
-                    { role: 'user', content: userPrompt },
-                ],
-            }),
-            signal: controller.signal,
-        });
-    } catch (err) {
-        if ((err as Error).name === 'AbortError') {
-            throw new Error(`LLM request timed out after ${timeoutMs / 1000}s (model: ${model}). Try a faster model or increase the timeout.`);
-        }
-        throw err;
-    } finally {
-        clearTimeout(timer);
-    }
-
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`${preset.name} API error (${response.status}): ${error}`);
-    }
-
-    if (options.verbose) console.log(`  Response received`);
-
-    const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-    };
-    const output = data.choices?.[0]?.message?.content;
-
-    if (!output) {
-        throw new Error(`${preset.name} API returned empty response`);
-    }
-
-    // Cache response
-    if (useCache) {
-        cacheResponse(userPrompt, model, temperature, cacheFormat, output, options.cacheContext);
-    }
-
-    return output;
+  return output;
 }
 
 // ── generateFlowchartInput (uses callLLM) ───────────────────────────────────
@@ -325,17 +331,17 @@ export async function callLLM(
  * Wraps callLLM with format-specific system prompts and output cleaning.
  */
 export async function generateFlowchartInput(
-    prompt: string,
-    format: OutputFormat,
-    options: GenerateOptions = {}
+  prompt: string,
+  format: OutputFormat,
+  options: GenerateOptions = {}
 ): Promise<string> {
-    // Build user message with optional context
-    let userMessage = prompt;
-    if (options.context) {
-        if (options.verbose) {
-            console.log(`  Adding context (${(options.context.length / 1024).toFixed(1)}KB)`);
-        }
-        userMessage = `YOUR TASK: ${prompt}
+  // Build user message with optional context
+  let userMessage = prompt;
+  if (options.context) {
+    if (options.verbose) {
+      console.log(`  Adding context (${(options.context.length / 1024).toFixed(1)}KB)`);
+    }
+    userMessage = `YOUR TASK: ${prompt}
 
 CRITICAL INSTRUCTIONS:
 1. Below is the COMPLETE codebase you need to analyze
@@ -353,246 +359,271 @@ ${options.context}
 Now, analyze the codebase above and ${prompt}
 
 Remember: Base your diagram ONLY on the code provided between the BEGIN/END markers above.`;
-    }
+  }
 
-    if (format === 'dsl') {
-        const rawPlan = await callLLM(userMessage, DSL_PLAN_SYSTEM_PROMPT, {
-            model: options.model,
-            apiKey: options.apiKey,
-            temperature: options.temperature,
-            verbose: options.verbose,
-            useCache: options.useCache,
-            cacheFormat: 'dsl-plan',
-            cacheContext: options.context,
-            timeoutMs: options.timeoutMs,
-            cacheOnly: options.cacheOnly,
-            provider: options.provider,
-        });
-
-        if (options.verbose) console.log(`  Rebuilding DSL from normalized plan...`);
-        try {
-            const plan = parseDslPlan(rawPlan);
-            const normalized = normalizeDslPlan(plan);
-            return buildDslFromPlan(normalized);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to build DSL from AI plan: ${message}`);
-        }
-    }
-
-    const raw = await callLLM(userMessage, JSON_SYSTEM_PROMPT, {
-        model: options.model,
-        apiKey: options.apiKey,
-        temperature: options.temperature,
-        verbose: options.verbose,
-        useCache: options.useCache,
-        cacheFormat: format,
-        cacheContext: options.context,
-        timeoutMs: options.timeoutMs,
-        cacheOnly: options.cacheOnly,
-        provider: options.provider,
+  if (format === 'dsl') {
+    const rawPlan = await callLLM(userMessage, DSL_PLAN_SYSTEM_PROMPT, {
+      model: options.model,
+      apiKey: options.apiKey,
+      temperature: options.temperature,
+      verbose: options.verbose,
+      useCache: options.useCache,
+      cacheFormat: 'dsl-plan',
+      cacheContext: options.context,
+      timeoutMs: options.timeoutMs,
+      cacheOnly: options.cacheOnly,
+      provider: options.provider,
     });
 
-    if (options.verbose) console.log(`  Cleaning and validating output...`);
+    if (options.verbose) console.log(`  Rebuilding DSL from normalized plan...`);
+    try {
+      const plan = parseDslPlan(rawPlan);
+      const normalized = normalizeDslPlan(plan);
+      return buildDslFromPlan(normalized);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to build DSL from AI plan: ${message}`);
+    }
+  }
 
-    return cleanOutput(raw, format);
+  const raw = await callLLM(userMessage, JSON_SYSTEM_PROMPT, {
+    model: options.model,
+    apiKey: options.apiKey,
+    temperature: options.temperature,
+    verbose: options.verbose,
+    useCache: options.useCache,
+    cacheFormat: format,
+    cacheContext: options.context,
+    timeoutMs: options.timeoutMs,
+    cacheOnly: options.cacheOnly,
+    provider: options.provider,
+  });
+
+  if (options.verbose) console.log(`  Cleaning and validating output...`);
+
+  return cleanOutput(raw, format);
 }
 
 function parseDslPlan(raw: string): DslPlan {
-    let cleaned = raw.trim();
-    cleaned = cleaned.replace(/```(?:json)?\n?/gi, '');
-    cleaned = cleaned.replace(/```\n?/g, '').trim();
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/```(?:json)?\n?/gi, '');
+  cleaned = cleaned.replace(/```\n?/g, '').trim();
 
-    const firstObj = cleaned.indexOf('{');
-    const lastObj = cleaned.lastIndexOf('}');
-    if (firstObj !== -1 && lastObj > firstObj) {
-        cleaned = cleaned.slice(firstObj, lastObj + 1);
-    }
+  const firstObj = cleaned.indexOf('{');
+  const lastObj = cleaned.lastIndexOf('}');
+  if (firstObj !== -1 && lastObj > firstObj) {
+    cleaned = cleaned.slice(firstObj, lastObj + 1);
+  }
 
-    const parsed = JSON.parse(cleaned) as DslPlan;
+  const parsed = JSON.parse(cleaned) as DslPlan;
 
-    if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Plan output is not a JSON object');
-    }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Plan output is not a JSON object');
+  }
 
-    return parsed;
+  return parsed;
 }
 
 function normalizeDirection(value: string | undefined): 'TB' | 'BT' | 'LR' | 'RL' | undefined {
-    if (!value) return undefined;
-    const dir = value.toUpperCase();
-    return dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL' ? dir : undefined;
+  if (!value) return undefined;
+  const dir = value.toUpperCase();
+  return dir === 'TB' || dir === 'BT' || dir === 'LR' || dir === 'RL' ? dir : undefined;
 }
 
 // Semantic kinds the DSL parser understands — pass them through as-is for automatic color styling.
 const SEMANTIC_KINDS = new Set([
-    'frontend', 'backend', 'api', 'service', 'worker',
-    'db', 'database', 'storage', 'queue', 'mq', 'broker', 'cache',
-    'external', 'user', 'orchestrator', 'hub', 'router',
-    'diamond', 'decision', 'condition',
-    'ellipse', 'oval', 'start', 'end',
-    'rectangle', 'process', 'cylinder',
+  'frontend',
+  'backend',
+  'api',
+  'service',
+  'worker',
+  'db',
+  'database',
+  'storage',
+  'queue',
+  'mq',
+  'broker',
+  'cache',
+  'external',
+  'user',
+  'orchestrator',
+  'hub',
+  'router',
+  'diamond',
+  'decision',
+  'condition',
+  'ellipse',
+  'oval',
+  'start',
+  'end',
+  'rectangle',
+  'process',
+  'cylinder',
 ]);
 
 function normalizeNodeType(value: string | undefined): string {
-    if (!value) return 'rectangle';
-    const type = value.toLowerCase();
-    // Pass through any known semantic kind; unknown values fall back to rectangle
-    return SEMANTIC_KINDS.has(type) ? type : 'rectangle';
+  if (!value) return 'rectangle';
+  const type = value.toLowerCase();
+  // Pass through any known semantic kind; unknown values fall back to rectangle
+  return SEMANTIC_KINDS.has(type) ? type : 'rectangle';
 }
 
 function sanitizeNodeLabel(label: string | undefined, fallback: string): string {
-    const value = (label || '').trim();
-    const cleaned = value
-        .replace(/[\[\]\{\}\(\)]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    return cleaned || fallback;
+  const value = (label || '').trim();
+  const cleaned = value
+    .replace(/[[\]{}()]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || fallback;
 }
 
 function sanitizeEdgeLabel(label: string | undefined): string | undefined {
-    if (!label) return undefined;
-    const cleaned = label.replace(/\s+/g, ' ').trim();
-    return cleaned.length > 0 ? cleaned.slice(0, 120) : undefined;
+  if (!label) return undefined;
+  const cleaned = label.replace(/\s+/g, ' ').trim();
+  return cleaned.length > 0 ? cleaned.slice(0, 120) : undefined;
 }
 
 function normalizeDslPlan(plan: DslPlan): NormalizedDslPlan {
-    const nodes: NormalizedDslNode[] = [];
-    const nodeById = new Map<string, NormalizedDslNode>();
+  const nodes: NormalizedDslNode[] = [];
+  const nodeById = new Map<string, NormalizedDslNode>();
 
-    const rawNodes = Array.isArray(plan.nodes) ? plan.nodes : [];
-    let autoNodeId = 1;
-    for (const rawNode of rawNodes) {
-        if (!rawNode || typeof rawNode !== 'object') continue;
+  const rawNodes = Array.isArray(plan.nodes) ? plan.nodes : [];
+  let autoNodeId = 1;
+  for (const rawNode of rawNodes) {
+    if (!rawNode || typeof rawNode !== 'object') continue;
 
-        const fallbackLabel = `Step ${autoNodeId}`;
-        const id = String(rawNode.id || `n${autoNodeId}`).trim();
-        const nodeId = id || `n${autoNodeId}`;
-        autoNodeId++;
+    const fallbackLabel = `Step ${autoNodeId}`;
+    const id = String(rawNode.id || `n${autoNodeId}`).trim();
+    const nodeId = id || `n${autoNodeId}`;
+    autoNodeId++;
 
-        if (nodeById.has(nodeId)) continue;
+    if (nodeById.has(nodeId)) continue;
 
-        const node: NormalizedDslNode = {
-            id: nodeId,
-            type: normalizeNodeType(rawNode.type),
-            label: sanitizeNodeLabel(rawNode.label, fallbackLabel),
-            color: typeof rawNode.color === 'string' && rawNode.color.startsWith('#') ? rawNode.color : undefined,
-        };
-        nodes.push(node);
-        nodeById.set(node.id, node);
+    const node: NormalizedDslNode = {
+      id: nodeId,
+      type: normalizeNodeType(rawNode.type),
+      label: sanitizeNodeLabel(rawNode.label, fallbackLabel),
+      color:
+        typeof rawNode.color === 'string' && rawNode.color.startsWith('#')
+          ? rawNode.color
+          : undefined,
+    };
+    nodes.push(node);
+    nodeById.set(node.id, node);
+  }
+
+  if (nodes.length === 0) {
+    nodes.push(
+      { id: 'start', type: 'ellipse', label: 'Start' },
+      { id: 'end', type: 'ellipse', label: 'End' }
+    );
+    nodeById.set('start', nodes[0]);
+    nodeById.set('end', nodes[1]);
+  }
+
+  const edges: NormalizedDslEdge[] = [];
+  const rawEdges = Array.isArray(plan.edges) ? plan.edges : [];
+  for (const rawEdge of rawEdges) {
+    if (!rawEdge || typeof rawEdge !== 'object') continue;
+    const from = String(rawEdge.from || '').trim();
+    const to = String(rawEdge.to || '').trim();
+    if (!from || !to) continue;
+    if (!nodeById.has(from) || !nodeById.has(to)) continue;
+
+    edges.push({
+      from,
+      to,
+      label: sanitizeEdgeLabel(rawEdge.label),
+      dashed: rawEdge.dashed === true,
+    });
+  }
+
+  // If model returned nodes without edges, create a simple chain to ensure valid flow.
+  if (edges.length === 0 && nodes.length > 1) {
+    for (let i = 0; i < nodes.length - 1; i++) {
+      edges.push({
+        from: nodes[i].id,
+        to: nodes[i + 1].id,
+        dashed: false,
+      });
     }
+  }
 
-    if (nodes.length === 0) {
-        nodes.push(
-            { id: 'start', type: 'ellipse', label: 'Start' },
-            { id: 'end', type: 'ellipse', label: 'End' },
-        );
-        nodeById.set('start', nodes[0]);
-        nodeById.set('end', nodes[1]);
-    }
+  const direction = normalizeDirection(plan.options?.direction);
+  const spacingInput = plan.options?.spacing ?? plan.options?.nodeSpacing;
+  const spacing =
+    typeof spacingInput === 'number' && Number.isFinite(spacingInput) && spacingInput > 0
+      ? Math.round(spacingInput)
+      : undefined;
 
-    const edges: NormalizedDslEdge[] = [];
-    const rawEdges = Array.isArray(plan.edges) ? plan.edges : [];
-    for (const rawEdge of rawEdges) {
-        if (!rawEdge || typeof rawEdge !== 'object') continue;
-        const from = String(rawEdge.from || '').trim();
-        const to = String(rawEdge.to || '').trim();
-        if (!from || !to) continue;
-        if (!nodeById.has(from) || !nodeById.has(to)) continue;
-
-        edges.push({
-            from,
-            to,
-            label: sanitizeEdgeLabel(rawEdge.label),
-            dashed: rawEdge.dashed === true,
-        });
-    }
-
-    // If model returned nodes without edges, create a simple chain to ensure valid flow.
-    if (edges.length === 0 && nodes.length > 1) {
-        for (let i = 0; i < nodes.length - 1; i++) {
-            edges.push({
-                from: nodes[i].id,
-                to: nodes[i + 1].id,
-                dashed: false,
-            });
-        }
-    }
-
-    const direction = normalizeDirection(plan.options?.direction);
-    const spacingInput = plan.options?.spacing ?? plan.options?.nodeSpacing;
-    const spacing = typeof spacingInput === 'number' && Number.isFinite(spacingInput) && spacingInput > 0
-        ? Math.round(spacingInput)
-        : undefined;
-
-    return { nodes, edges, direction, spacing };
+  return { nodes, edges, direction, spacing };
 }
 
 function normalizeDslRefId(raw: string, fallbackIndex: number): string {
-    const base = raw
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    return base || `n${fallbackIndex}`;
+  const base = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return base || `n${fallbackIndex}`;
 }
 
 function quoteDsl(value: string): string {
-    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 function buildDslFromPlan(plan: NormalizedDslPlan): string {
-    const lines: string[] = [];
+  const lines: string[] = [];
 
-    if (plan.direction) lines.push(`@direction ${plan.direction}`);
-    if (plan.spacing) lines.push(`@spacing ${plan.spacing}`);
-    if (lines.length > 0) lines.push('');
+  if (plan.direction) lines.push(`@direction ${plan.direction}`);
+  if (plan.spacing) lines.push(`@spacing ${plan.spacing}`);
+  if (lines.length > 0) lines.push('');
 
-    const nodeRefByOriginalId = new Map<string, string>();
-    const usedRefs = new Set<string>();
+  const nodeRefByOriginalId = new Map<string, string>();
+  const usedRefs = new Set<string>();
 
-    for (let i = 0; i < plan.nodes.length; i++) {
-        const node = plan.nodes[i];
-        let ref = normalizeDslRefId(node.id, i + 1);
-        if (usedRefs.has(ref)) {
-            let suffix = 2;
-            while (usedRefs.has(`${ref}-${suffix}`)) suffix++;
-            ref = `${ref}-${suffix}`;
-        }
-        usedRefs.add(ref);
-        nodeRefByOriginalId.set(node.id, ref);
-
-        const colorToken = node.color ? ` bg:${node.color}` : '';
-        lines.push(`@node ${ref} ${node.type} ${quoteDsl(node.label)}${colorToken}`);
+  for (let i = 0; i < plan.nodes.length; i++) {
+    const node = plan.nodes[i];
+    let ref = normalizeDslRefId(node.id, i + 1);
+    if (usedRefs.has(ref)) {
+      let suffix = 2;
+      while (usedRefs.has(`${ref}-${suffix}`)) suffix++;
+      ref = `${ref}-${suffix}`;
     }
+    usedRefs.add(ref);
+    nodeRefByOriginalId.set(node.id, ref);
 
-    if (plan.nodes.length > 0 && plan.edges.length > 0) {
-        lines.push('');
+    const colorToken = node.color ? ` bg:${node.color}` : '';
+    lines.push(`@node ${ref} ${node.type} ${quoteDsl(node.label)}${colorToken}`);
+  }
+
+  if (plan.nodes.length > 0 && plan.edges.length > 0) {
+    lines.push('');
+  }
+
+  for (const edge of plan.edges) {
+    const fromRef = nodeRefByOriginalId.get(edge.from);
+    const toRef = nodeRefByOriginalId.get(edge.to);
+    if (!fromRef || !toRef) continue;
+
+    let edgeLine = `@edge ${fromRef} ${toRef}`;
+    if (edge.label) {
+      edgeLine += ` ${quoteDsl(edge.label)}`;
     }
-
-    for (const edge of plan.edges) {
-        const fromRef = nodeRefByOriginalId.get(edge.from);
-        const toRef = nodeRefByOriginalId.get(edge.to);
-        if (!fromRef || !toRef) continue;
-
-        let edgeLine = `@edge ${fromRef} ${toRef}`;
-        if (edge.label) {
-            edgeLine += ` ${quoteDsl(edge.label)}`;
-        }
-        if (edge.dashed) {
-            edgeLine += ' dashed';
-        }
-        lines.push(edgeLine);
+    if (edge.dashed) {
+      edgeLine += ' dashed';
     }
+    lines.push(edgeLine);
+  }
 
-    const output = lines.join('\n').trim();
-    if (!output) {
-        return `@node start ellipse "Start"
+  const output = lines.join('\n').trim();
+  if (!output) {
+    return `@node start ellipse "Start"
 @node end ellipse "End"
 
 @edge start end`;
-    }
-    return output;
+  }
+  return output;
 }
 
 // ── Output cleaning ─────────────────────────────────────────────────────────
@@ -601,45 +632,45 @@ function buildDslFromPlan(plan: NormalizedDslPlan): string {
  * Clean AI output - remove markdown wrappers and explanations
  */
 function cleanOutput(output: string, format: OutputFormat): string {
-    let cleaned = output.trim();
+  let cleaned = output.trim();
 
-    // Remove markdown code blocks
-    cleaned = cleaned.replace(/```(?:dsl|json)?\n?/g, '');
-    cleaned = cleaned.replace(/```\n?/g, '');
+  // Remove markdown code blocks
+  cleaned = cleaned.replace(/```(?:dsl|json)?\n?/g, '');
+  cleaned = cleaned.replace(/```\n?/g, '');
 
-    // Remove common explanation prefixes
-    const lines = cleaned.split('\n');
-    let startIndex = 0;
+  // Remove common explanation prefixes
+  const lines = cleaned.split('\n');
+  let startIndex = 0;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.length === 0) continue;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.length === 0) continue;
 
-        if (/^(Here is|Here's|This is|The following|I've created|I created)/i.test(line)) {
-            startIndex = i + 1;
-            continue;
-        }
-        break;
+    if (/^(Here is|Here's|This is|The following|I've created|I created)/i.test(line)) {
+      startIndex = i + 1;
+      continue;
     }
+    break;
+  }
 
-    cleaned = lines.slice(startIndex).join('\n').trim();
+  cleaned = lines.slice(startIndex).join('\n').trim();
 
-    // Format-specific validation
-    if (format === 'json') {
-        if (!cleaned.startsWith('{') && !cleaned.startsWith('[')) {
-            throw new Error(
-                'AI output does not appear to be valid JSON. Expected output to start with { or [.\n\n' +
-                'This is a bug in the AI model output. Please try again or use a different model.'
-            );
-        }
-    } else if (format === 'dsl') {
-        if (!cleaned.includes('@node') && !cleaned.includes('@edge')) {
-            throw new Error(
-                'AI output does not appear to be valid DSL. Expected nodes and connections.\n\n' +
-                'This is a bug in the AI model output. Please try again or use a different model.'
-            );
-        }
+  // Format-specific validation
+  if (format === 'json') {
+    if (!cleaned.startsWith('{') && !cleaned.startsWith('[')) {
+      throw new Error(
+        'AI output does not appear to be valid JSON. Expected output to start with { or [.\n\n' +
+          'This is a bug in the AI model output. Please try again or use a different model.'
+      );
     }
+  } else if (format === 'dsl') {
+    if (!cleaned.includes('@node') && !cleaned.includes('@edge')) {
+      throw new Error(
+        'AI output does not appear to be valid DSL. Expected nodes and connections.\n\n' +
+          'This is a bug in the AI model output. Please try again or use a different model.'
+      );
+    }
+  }
 
-    return cleaned;
+  return cleaned;
 }

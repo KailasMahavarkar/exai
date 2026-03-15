@@ -64,14 +64,26 @@ export { exportExcalidraw } from './export/render.js';
 export { shareExcalidraw } from './share/upload.js';
 
 // Checkpoint exports
-export { saveCheckpoint, loadCheckpoint, listCheckpoints, removeCheckpoint } from './diagram/checkpoint.js';
+export {
+  saveCheckpoint,
+  loadCheckpoint,
+  listCheckpoints,
+  removeCheckpoint,
+} from './diagram/checkpoint.js';
 
 // Reference exports
 export { PALETTES, ELEMENT_FORMAT, SIZING, TIPS } from './reference/data.js';
 export { renderReference, getReferenceData } from './reference/render.js';
 
 // Auth/session exports
-export { loadSession, setKey, getKey, removeKey, listKeys, resolveApiKeyFull } from './auth/session.js';
+export {
+  loadSession,
+  setKey,
+  getKey,
+  removeKey,
+  listKeys,
+  resolveApiKeyFull,
+} from './auth/session.js';
 
 // Provider exports
 export { PROVIDER_PRESETS, resolveProvider } from './ai/contants.js';
@@ -96,7 +108,9 @@ export async function createFlowchartFromDSL(dsl: string): Promise<string> {
 /**
  * High-level API: Create an Excalidraw flowchart from JSON input
  */
-export async function createFlowchartFromJSON(input: import('./types/dsl.js').FlowchartInput): Promise<string> {
+export async function createFlowchartFromJSON(
+  input: import('./types/dsl.js').FlowchartInput
+): Promise<string> {
   const graph = (await import('./parser/json-parser.js')).parseJSON(input);
   const layoutedGraph = await (await import('./layout/elk-layout.js')).layoutGraph(graph);
   const excalidrawFile = (await import('./generator/excalidraw-generator.js')).generateExcalidraw(

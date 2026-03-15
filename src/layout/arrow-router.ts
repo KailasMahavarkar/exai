@@ -135,10 +135,11 @@ export function calculateEndBinding(
  */
 export function computeSharedBinding(
   node: LayoutedNode,
-  neighborNodes: LayoutedNode[],
+  neighborNodes: LayoutedNode[]
 ): ExcalidrawArrowBinding {
   // Average center of all neighbor nodes
-  let avgX = 0, avgY = 0;
+  let avgX = 0,
+    avgY = 0;
   for (const n of neighborNodes) {
     avgX += n.x + n.width / 2;
     avgY += n.y + n.height / 2;

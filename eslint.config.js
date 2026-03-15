@@ -18,6 +18,13 @@ export default [
         Buffer: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
+        fetch: 'readonly',
+        Response: 'readonly',
+        AbortController: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        Blob: 'readonly',
+        btoa: 'readonly',
       },
     },
     plugins: {

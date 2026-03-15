@@ -125,7 +125,10 @@ function getElkDirection(direction: LayoutOptions['direction']): string {
 /**
  * Resolve group boundaries from layouted nodes.
  */
-function resolveGroups(groups: GraphGroup[] | undefined, layoutedNodes: LayoutedNode[]): LayoutedGroup[] {
+function resolveGroups(
+  groups: GraphGroup[] | undefined,
+  layoutedNodes: LayoutedNode[]
+): LayoutedGroup[] {
   if (!groups || groups.length === 0) return [];
 
   const nodeById = new Map<string, LayoutedNode>();
@@ -135,7 +138,9 @@ function resolveGroups(groups: GraphGroup[] | undefined, layoutedNodes: Layouted
 
   const resolved: LayoutedGroup[] = [];
   for (const group of groups) {
-    const members = group.nodeIds.map((id) => nodeById.get(id)).filter((n): n is LayoutedNode => Boolean(n));
+    const members = group.nodeIds
+      .map((id) => nodeById.get(id))
+      .filter((n): n is LayoutedNode => Boolean(n));
     if (members.length === 0) continue;
 
     const padding = Math.max(0, group.style?.padding ?? 30);
@@ -168,7 +173,10 @@ function resolveGroups(groups: GraphGroup[] | undefined, layoutedNodes: Layouted
 /**
  * Layout a flowchart graph using ELK
  */
-export async function layoutGraph(graph: FlowchartGraph, verbose: boolean = false): Promise<LayoutedGraph> {
+export async function layoutGraph(
+  graph: FlowchartGraph,
+  verbose: boolean = false
+): Promise<LayoutedGraph> {
   // Load ELK dynamically with fallback
   const ELKConstructor = await loadELK();
   const elk = new ELKConstructor();

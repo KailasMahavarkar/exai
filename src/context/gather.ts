@@ -195,7 +195,9 @@ export async function gatherContext(
   const readMs = Date.now() - readStart;
 
   if (verbose) {
-    console.log(`  Read ${readResult.totalFiles} files (${(readResult.totalSize / 1024).toFixed(1)}KB) in ${readMs}ms`);
+    console.log(
+      `  Read ${readResult.totalFiles} files (${(readResult.totalSize / 1024).toFixed(1)}KB) in ${readMs}ms`
+    );
     console.log(`  Skipped ${readResult.skipped.length} files`);
   }
 
@@ -217,12 +219,14 @@ export async function gatherContext(
     };
 
     if (verbose) {
-      console.log(`  Compressed: ${(compressResult.originalSize / 1024).toFixed(1)}KB -> ${(compressResult.compressedSize / 1024).toFixed(1)}KB (${compressResult.compressionRatio.toFixed(1)}% reduction) in ${compressMs}ms`);
+      console.log(
+        `  Compressed: ${(compressResult.originalSize / 1024).toFixed(1)}KB -> ${(compressResult.compressedSize / 1024).toFixed(1)}KB (${compressResult.compressionRatio.toFixed(1)}% reduction) in ${compressMs}ms`
+      );
     }
   }
 
   // ── Step 5: Format as markdown ───────────────────────────────────────────
-  const rootLabel = paths.map(p => basename(p)).join(', ');
+  const rootLabel = paths.map((p) => basename(p)).join(', ');
   const markdown =
     `# Project Structure\n\n\`\`\`\n${finalTree}\n\`\`\`\n\n` +
     formatAsMarkdown({ ...readResult, files: finalFiles }, rootLabel);

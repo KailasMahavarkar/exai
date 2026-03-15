@@ -36,22 +36,30 @@ const DEFAULTS: Required<CompressOptions> = {
 };
 
 const CODE_EXTENSIONS = new Set([
-  'typescript', 'javascript', 'python', 'java', 'go', 'rust',
-  'cpp', 'c', 'csharp', 'kotlin', 'ruby', 'php', 'swift',
+  'typescript',
+  'javascript',
+  'python',
+  'java',
+  'go',
+  'rust',
+  'cpp',
+  'c',
+  'csharp',
+  'kotlin',
+  'ruby',
+  'php',
+  'swift',
 ]);
 
 /**
  * Compress file entries, reducing content size while preserving structure.
  */
-export function compressFiles(
-  files: FileEntry[],
-  options: CompressOptions = {}
-): CompressResult {
+export function compressFiles(files: FileEntry[], options: CompressOptions = {}): CompressResult {
   const opts = { ...DEFAULTS, ...options };
   const originalSize = files.reduce((s, f) => s + f.size, 0);
   let filesProcessed = 0;
 
-  const compressed = files.map(file => {
+  const compressed = files.map((file) => {
     const isCode = CODE_EXTENSIONS.has(file.language);
 
     if (!isCode) {
@@ -120,7 +128,7 @@ function removeComments(content: string): string {
 function minifyWhitespace(content: string): string {
   return content
     .split('\n')
-    .map(l => l.trimEnd())
+    .map((l) => l.trimEnd())
     .filter((line, i, arr) => {
       if (line.trim().length > 0) return true;
       // Remove consecutive blank lines
@@ -141,7 +149,7 @@ function extractSignatures(content: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (sigPatterns.some(p => p.test(trimmed))) {
+    if (sigPatterns.some((p) => p.test(trimmed))) {
       sigs.push(line);
     } else if (trimmed.startsWith('import ') || trimmed.startsWith('export ')) {
       sigs.push(line);

@@ -25,14 +25,27 @@ export interface TreeOptions {
  * Filters: pre-filter (node_modules, binaries, lock files) + exclude patterns.
  */
 export function generateTree(paths: string[], options: TreeOptions = {}): string {
-  const { maxDepth = 6, maxItems = 1000, extraExcludeDirs, excludePatterns, allowTestFiles = false } = options;
+  const {
+    maxDepth = 6,
+    maxItems = 1000,
+    extraExcludeDirs,
+    excludePatterns,
+    allowTestFiles = false,
+  } = options;
   const lines: string[] = [];
   let totalItems = 0;
 
   for (const rootPath of paths) {
     lines.push(`${basename(rootPath)}/`);
 
-    const gen = treeHelper(rootPath, maxDepth, '', extraExcludeDirs, excludePatterns, allowTestFiles);
+    const gen = treeHelper(
+      rootPath,
+      maxDepth,
+      '',
+      extraExcludeDirs,
+      excludePatterns,
+      allowTestFiles
+    );
     for (const line of gen) {
       lines.push(line);
       totalItems++;
@@ -66,13 +79,19 @@ function* treeHelper(
   }
 
   const sorted = entries
-    .filter(e => {
+    .filter((e) => {
       // Directory pre-filter (node_modules, .git, test dirs, etc.)
-      if (e.isDirectory() && shouldPreExcludeDir(e.name, extraExcludeDirs, allowTestFiles)) return false;
+      if (e.isDirectory() && shouldPreExcludeDir(e.name, extraExcludeDirs, allowTestFiles))
+        return false;
       // File pre-filter (binary extensions, lock files, test files)
       if (!e.isDirectory() && shouldPreExcludeFileName(e.name, allowTestFiles)) return false;
       // Exclude patterns (manual + AI: works on both files and dirs)
-      if (excludePatterns && excludePatterns.length > 0 && matchesAiExclusion(e.name, excludePatterns)) return false;
+      if (
+        excludePatterns &&
+        excludePatterns.length > 0 &&
+        matchesAiExclusion(e.name, excludePatterns)
+      )
+        return false;
       return true;
     })
     .sort((a, b) => {

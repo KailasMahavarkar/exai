@@ -80,7 +80,7 @@ This diagram uses a dark background (#121212). Use dark-mode friendly colors:
 - Avoid pure white backgrounds — use muted/dark tones.`;
 
 export function buildUserPrompt(prompt: string, direction: string, theme?: DiagramTheme): string {
-    const directionHint = `Layout direction: ${direction} (${direction === 'TB' ? 'top-to-bottom' : 'left-to-right'})`;
-    const themeHint = theme === 'dark' ? DARK_MODE_GUIDANCE : '';
-    return `Create a diagram for: ${prompt}\n\n${directionHint}${themeHint}`;
+  const directionHint = `Layout direction: ${direction} (${direction === 'TB' ? 'top-to-bottom' : 'left-to-right'})`;
+  const themeHint = theme === 'dark' ? DARK_MODE_GUIDANCE : '';
+  return `Create a diagram for: ${prompt}\n\n${directionHint}${themeHint}`;
 }

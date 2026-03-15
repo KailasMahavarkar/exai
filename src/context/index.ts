@@ -14,4 +14,9 @@ export { compressFiles } from './compress.js';
 export type { CompressOptions, CompressResult } from './compress.js';
 
 // Filtering
-export { shouldPreExcludeDir, shouldPreExcludeFile, shouldPreExcludeFileName, matchesAiExclusion } from './filter.js';
+export {
+  shouldPreExcludeDir,
+  shouldPreExcludeFile,
+  shouldPreExcludeFileName,
+  matchesAiExclusion,
+} from './filter.js';

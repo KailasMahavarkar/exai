@@ -8,7 +8,6 @@ import { nanoid } from 'nanoid';
 import {
   createBaseElement,
   createNode,
-  createArrow,
   createArrowWithBindings,
   createText,
   createNodeLabel,
@@ -20,7 +19,11 @@ import {
   generateFileId,
   getImageDimensions,
 } from '../factory/index.js';
-import { calculateStartBinding, calculateEndBinding, computeSharedBinding } from '../layout/arrow-router.js';
+import {
+  calculateStartBinding,
+  calculateEndBinding,
+  computeSharedBinding,
+} from '../layout/arrow-router.js';
 import type { ExcalidrawArrowBinding } from '../types/excalidraw.js';
 import type {
   ExcalidrawFile,
@@ -116,7 +119,12 @@ function generateScatteredImages(
 }
 
 function sanitizeGroupId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || nanoid(8);
+  return (
+    id
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || nanoid(8)
+  );
 }
 
 /**
@@ -152,7 +160,10 @@ function globalToEdgeStyle(g: GlobalDiagramStyle): EdgeStyle {
  * @param graph - The layouted graph to generate
  * @param globalStyleOverride - Global style from config (lowest priority; overridden by DSL @style and per-node/edge styles)
  */
-export function generateExcalidraw(graph: LayoutedGraph, globalStyleOverride?: GlobalDiagramStyle): ExcalidrawFile {
+export function generateExcalidraw(
+  graph: LayoutedGraph,
+  globalStyleOverride?: GlobalDiagramStyle
+): ExcalidrawFile {
   // Reset index counter for fresh ordering
   resetIndexCounter();
 
@@ -274,9 +285,8 @@ export function generateExcalidraw(graph: LayoutedGraph, globalStyleOverride?: G
       const effectiveNodeStyle: NodeStyle | undefined = baseNodeStyle
         ? { ...baseNodeStyle, ...(node.style ?? {}) }
         : node.style;
-      const effectiveNode = effectiveNodeStyle !== node.style
-        ? { ...node, style: effectiveNodeStyle }
-        : node;
+      const effectiveNode =
+        effectiveNodeStyle !== node.style ? { ...node, style: effectiveNodeStyle } : node;
 
       // Create shape element
       const boundElements = nodeBoundElements.get(node.id);
@@ -370,10 +380,10 @@ export function generateExcalidraw(graph: LayoutedGraph, globalStyleOverride?: G
     }
 
     // Use shared binding points when multiple edges share the same source/target
-    const startBinding = sharedStartBinding.get(edge.source)
-      ?? calculateStartBinding(sourceNode, targetNode).binding;
-    const endBinding = sharedEndBinding.get(edge.target)
-      ?? calculateEndBinding(sourceNode, targetNode).binding;
+    const startBinding =
+      sharedStartBinding.get(edge.source) ?? calculateStartBinding(sourceNode, targetNode).binding;
+    const endBinding =
+      sharedEndBinding.get(edge.target) ?? calculateEndBinding(sourceNode, targetNode).binding;
 
     // Merge global style (lowest priority) with per-edge style (highest priority)
     const effectiveEdgeStyle: EdgeStyle | undefined = baseEdgeStyle
@@ -381,7 +391,9 @@ export function generateExcalidraw(graph: LayoutedGraph, globalStyleOverride?: G
       : edge.style;
 
     // Create arrow with bound text if it has a label
-    const boundElements = edge.label ? [{ id: `text-${edge.id}`, type: 'text' as const }] : undefined;
+    const boundElements = edge.label
+      ? [{ id: `text-${edge.id}`, type: 'text' as const }]
+      : undefined;
     const arrowElement = createArrowWithBindings(
       edge.id,
       edge.sourcePoint.x,
@@ -390,7 +402,7 @@ export function generateExcalidraw(graph: LayoutedGraph, globalStyleOverride?: G
       startBinding,
       endBinding,
       boundElements,
-      effectiveEdgeStyle,
+      effectiveEdgeStyle
     );
     elements.push(arrowElement);
 
