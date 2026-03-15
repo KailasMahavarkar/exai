@@ -55,7 +55,6 @@ export interface CliConfig {
     // AI / LLM
     model?: string;
     filterModel?: string;
-    apiKey?: string;
     temperature?: number;
     /** Provider preset name (openrouter, openai, ollama, etc.) or custom base URL */
     provider?: string;
@@ -101,7 +100,7 @@ export interface CliConfig {
 
 const KNOWN_KEYS = new Set<string>([
     // AI / LLM
-    'model', 'filterModel', 'apiKey', 'temperature', 'provider',
+    'model', 'filterModel', 'temperature', 'provider',
     // Output
     'format', 'output', 'direction', 'spacing',
     // Context
@@ -285,8 +284,10 @@ export function loadConfig(configPath: string): CliConfig {
     // AI / LLM
     if (obj.model !== undefined) config.model = assertString(obj, 'model');
     if (obj.filterModel !== undefined) config.filterModel = assertString(obj, 'filterModel');
-    if (obj.apiKey !== undefined) config.apiKey = assertString(obj, 'apiKey');
     if (obj.temperature !== undefined) config.temperature = assertNumber(obj, 'temperature');
+    if (obj.apiKey !== undefined) {
+        console.warn('Warning: "apiKey" in config file is no longer supported. Use `exai auth set <provider> <key>` instead.');
+    }
     if (obj.provider !== undefined) config.provider = assertString(obj, 'provider');
 
     // Output
@@ -359,10 +360,9 @@ export function loadConfig(configPath: string): CliConfig {
  * Shows every available option with sensible defaults.
  */
 export const CONFIG_TEMPLATE: CliConfig = {
-    // AI / LLM
+    // AI / LLM — API keys are managed via `exai auth set <provider> <key>`
     model: 'moonshotai/kimi-k2.5',
     filterModel: 'moonshotai/kimi-k2.5',
-    apiKey: "<Set EXAI_OPENROUTER_APIKEY in .env or paste locally. Warning!! Do not commit this file with apiKey>",
     temperature: 0,
 
     // Output

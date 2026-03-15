@@ -142,13 +142,11 @@ function maskKey(key: string): string {
  *   1. Explicit CLI flag (--api-key)
  *   2. Environment variable (EXAI_OPENROUTER_APIKEY / OPENROUTER_API_KEY)
  *   3. Session file (~/.exai/session.json) — per provider
- *   4. Config file (exai.config.json) — with warning
  *
  * Returns { apiKey, source } or { apiKey: undefined, source: 'none' }
  */
 export function resolveApiKeyFull(
     cliKey: string | undefined,
-    configKey: string | undefined,
     provider?: string,
 ): { apiKey: string | undefined; source: string } {
     // 1. CLI flag
@@ -166,12 +164,6 @@ export function resolveApiKeyFull(
     const sessionKey = getKey(provider);
     if (sessionKey) {
         return { apiKey: sessionKey, source: `~/.exai/session.json (${provider || 'default'})` };
-    }
-
-    // 4. Config file (with warning — should migrate to session)
-    if (configKey && configKey !== '<!!>' && !configKey.startsWith('<')) {
-        console.warn('Warning: API key found in exai.config.json. Consider using `exai auth set <provider> <key>` instead (stored in ~/.exai/session.json, never committed).');
-        return { apiKey: configKey, source: 'config file (consider migrating)' };
     }
 
     return { apiKey: undefined, source: 'none' };

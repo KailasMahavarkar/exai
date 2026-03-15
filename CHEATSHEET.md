@@ -303,7 +303,6 @@ Create with `exai init` or manually at `exai.config.json` (auto-detected).
 {
   "model": "moonshotai/kimi-k2.5",
   "provider": "openrouter",
-  "apiKey": "sk-or-v1-...",
   "temperature": 0,
   "format": "dsl",
   "output": "flowchart.excalidraw",
@@ -398,7 +397,6 @@ Key resolution priority:
 1. `--api-key` CLI flag
 2. `EXAI_OPENROUTER_APIKEY` environment variable
 3. `~/.exai/session.json` (per provider)
-4. `exai.config.json` (with migration warning)
 
 ---
 

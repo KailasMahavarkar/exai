@@ -162,7 +162,6 @@ function excalidrawConfigToGlobalStyle(cfg: ExcalidrawStyleConfig): GlobalDiagra
 
 function resolveApiKey(
     optionsApiKey: string | undefined,
-    configApiKey: string | undefined,
     command: Command,
     provider?: string,
 ): { apiKey?: string; source?: string } {
@@ -172,7 +171,7 @@ function resolveApiKey(
 
     const envFileKeys = readApiKeysFromDotEnv();
 
-    // 2) Environment / .env (preferred)
+    // 2) Environment / .env
     const fromExaiEnv = process.env[EXAI_API_KEY_ENV]?.trim() || envFileKeys.exai?.trim();
     if (fromExaiEnv) return { apiKey: fromExaiEnv, source: EXAI_API_KEY_ENV };
 
@@ -187,13 +186,6 @@ function resolveApiKey(
         if (sessionKey) return { apiKey: sessionKey, source: `~/.exai/session.json (${provider || 'default'})` };
     } catch {
         // session module not available — skip
-    }
-
-    // 4) Config file fallback (with warning)
-    const fromConfig = configApiKey?.trim();
-    if (fromConfig && fromConfig !== '<!!>' && !fromConfig.startsWith('<')) {
-        console.warn('Warning: API key in exai.config.json — consider `exai auth set <provider> <key>` instead (stored in ~/.exai/session.json, never committed).');
-        return { apiKey: fromConfig, source: 'config file' };
     }
 
     return {};
@@ -508,7 +500,7 @@ program
             const { resolveProvider } = await import('./ai/contants.js');
             const provider = resolveProvider(options.provider);
 
-            const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(options.apiKey, config.apiKey, command, options.provider);
+            const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(options.apiKey, command, options.provider);
             if (!resolvedApiKey && provider.authStyle === 'bearer') {
                 console.error('⚠️  Missing API key.');
                 console.error(`Set it via: exai auth set ${options.provider || 'openrouter'} <key>`);
@@ -867,7 +859,7 @@ program
                 const { resolveProvider: rp } = await import('./ai/contants.js');
                 const prov = rp(options.provider || config.provider);
                 const provName = options.provider || config.provider;
-                const resolved = resolveApiKey(options.apiKey, config.apiKey, command, provName);
+                const resolved = resolveApiKey(options.apiKey, command, provName);
                 apiKey = resolved.apiKey;
                 if (!apiKey && prov.authStyle === 'bearer') {
                     console.error(`Error: API key required. Run: exai auth set ${provName || 'openrouter'} <key>`);

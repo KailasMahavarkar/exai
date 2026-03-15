@@ -42,7 +42,7 @@ Or use a local provider (no API key needed):
 exai diagram "auth flow" --provider ollama
 ```
 
-Key priority: `--api-key` flag > env var > `~/.exai/session.json` > config file
+Key priority: `--api-key` flag > env var > `~/.exai/session.json`
 
 ## Commands
 
@@ -241,7 +241,6 @@ One file controls everything. Generate with `exai init`.
 {
   "model": "moonshotai/kimi-k2.5",
   "provider": "openrouter",
-  "apiKey": "sk-or-v1-...",
   "temperature": 0,
   "format": "dsl",
   "output": "flowchart.excalidraw",
