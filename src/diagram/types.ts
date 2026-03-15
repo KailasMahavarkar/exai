@@ -84,6 +84,12 @@ export interface SimplifiedArrow {
   strokeColor?: string;
   /** 'solid' | 'dashed' | 'dotted' */
   strokeStyle?: string;
+  /** 'elbow' | 'round' | 'sharp' — arrow routing (default: style-dependent) */
+  routing?: string;
+  /** 0=architect | 1=artist | 2=cartoonist — sloppiness (default: style-dependent) */
+  roughness?: number;
+  /** 1=thin | 2=bold | 4=extra bold (default: style-dependent) */
+  strokeWidth?: number;
 }
 
 export type SimplifiedElement = SimplifiedShape | SimplifiedArrow;

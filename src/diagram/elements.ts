@@ -318,15 +318,17 @@ export function applyDefaults(
       strokeWidth: preset.strokeWidth,
     };
 
-    if (el.type !== 'text' && el.type !== 'arrow') {
-      updates.roundness = preset.roundness;
-    }
-
-    if (el.type === 'text') {
+    if (el.type === 'arrow') {
+      // Only apply preset roughness/strokeWidth if not explicitly set on the arrow
+      // Arrow roundness and elbowed are set during resolveBindings, don't override
+    } else if (el.type === 'text') {
       // Only apply preset fontFamily if element uses the default (not overridden by rich label)
       if (el.fontFamily === 1) {
         updates.fontFamily = preset.fontFamily;
       }
+    } else {
+      // Shapes get roundness from preset
+      updates.roundness = preset.roundness;
     }
 
     return { ...el, ...updates };
@@ -376,20 +378,26 @@ export function resolveBindings(
         ? [[0.5, 1] as [number, number], [0.5, 0] as [number, number]] // bottom → top
         : [[1, 0.5] as [number, number], [0, 0.5] as [number, number]]; // right → left
 
+    // Resolve arrow routing: elbow (right-angle), round (curved), sharp (straight)
+    const routing = arr.routing ?? 'round';
+    const isElbowed = routing === 'elbow';
+    const arrowRoundness = routing === 'round' ? { type: 2 } : null;
+
     // Arrow element (points computed during layout)
     const arrowEl = baseElement(
       {
         id: arrowId,
         type: 'arrow',
-        roughness: 0,
-        roundness: null,
+        roughness: arr.roughness ?? 1,
+        roundness: arrowRoundness,
         strokeColor: arr.strokeColor ?? colors.defaultArrowColor,
         strokeStyle: (arr.strokeStyle as 'solid' | 'dashed' | 'dotted') ?? 'solid',
+        strokeWidth: arr.strokeWidth ?? 2,
         points: [
           [0, 0],
           [0, 0],
         ], // placeholder — computed in layout
-        elbowed: true,
+        elbowed: isElbowed,
         startArrowhead: null,
         endArrowhead: 'arrow',
         startBinding: {

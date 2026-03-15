@@ -39,12 +39,19 @@ Labels can be a string or an object for fine control:
   - fontFamily: 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code)
   - strokeColor: hex text color
 
-## Optional properties
+## Optional shape properties
 
 - backgroundColor: hex color (e.g. "#a5d8ff" for blue, "#b2f2bb" for green, "#ffc9c9" for red, "#d0bfff" for purple, "#e9ecef" for gray)
 - strokeColor: hex border color
-- strokeStyle: "dashed" for optional connections
 - group: string label to visually group related shapes
+
+## Optional arrow properties
+
+- label: text on the arrow edge
+- strokeStyle: "solid" (default), "dashed", "dotted"
+- routing: "round" (curved, default), "elbow" (right-angle), "sharp" (straight)
+- roughness: 0 (architect), 1 (artist, default), 2 (cartoonist)
+- strokeWidth: 1 (thin), 2 (bold, default), 4 (extra bold)
 
 ## Pseudo-elements (optional)
 
