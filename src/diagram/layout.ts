@@ -3,7 +3,7 @@
  *
  * Performs topological sort on arrow edges to determine layer assignment,
  * then positions shapes in a grid (TB or LR direction).
- * Computes arrow points and viewport framing.
+ * Computes arrow edge-intersection points and viewport framing.
  */
 
 import type {
@@ -18,6 +18,7 @@ import type {
 const NODE_GAP_X = 80;
 const NODE_GAP_Y = 100;
 const PADDING = 60;
+const ARROW_GAP = 8; // gap between arrow endpoint and shape edge
 
 // ── Topological Sort ──
 
@@ -28,7 +29,6 @@ interface LayoutNode {
 }
 
 function topoSort(shapeIds: string[], arrows: SimplifiedArrow[]): LayoutNode[] {
-  // Build adjacency and in-degree
   const adj = new Map<string, string[]>();
   const inDeg = new Map<string, number>();
   const idSet = new Set(shapeIds);
@@ -47,7 +47,6 @@ function topoSort(shapeIds: string[], arrows: SimplifiedArrow[]): LayoutNode[] {
   // BFS layering (Kahn's algorithm)
   const layers: string[][] = [];
   let queue = shapeIds.filter((id) => (inDeg.get(id) ?? 0) === 0);
-
   const visited = new Set<string>();
 
   while (queue.length > 0) {
@@ -74,7 +73,6 @@ function topoSort(shapeIds: string[], arrows: SimplifiedArrow[]): LayoutNode[] {
     layers.push(unvisited);
   }
 
-  // Assign layer + column
   const result: LayoutNode[] = [];
   for (let layer = 0; layer < layers.length; layer++) {
     for (let col = 0; col < layers[layer].length; col++) {
@@ -85,24 +83,124 @@ function topoSort(shapeIds: string[], arrows: SimplifiedArrow[]): LayoutNode[] {
   return result;
 }
 
+// ── Edge Point Computation ──
+
+/** Get center point of a shape */
+function shapeCenter(shape: ExcalidrawElement): { x: number; y: number } {
+  return {
+    x: shape.x + shape.width / 2,
+    y: shape.y + shape.height / 2,
+  };
+}
+
+/**
+ * Compute the point where an arrow should connect to a shape's edge,
+ * given a target point the arrow is heading toward.
+ * Uses geometric intersection based on shape type.
+ */
+function computeEdgePoint(
+  shape: ExcalidrawElement,
+  targetX: number,
+  targetY: number,
+): { x: number; y: number } {
+  const cx = shape.x + shape.width / 2;
+  const cy = shape.y + shape.height / 2;
+  const dx = targetX - cx;
+  const dy = targetY - cy;
+
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+    return { x: cx, y: cy + shape.height / 2 };
+  }
+
+  if (shape.type === 'ellipse') {
+    const a = shape.width / 2;
+    const b = shape.height / 2;
+    const angle = Math.atan2(dy, dx);
+    return {
+      x: cx + a * Math.cos(angle),
+      y: cy + b * Math.sin(angle),
+    };
+  }
+
+  if (shape.type === 'diamond') {
+    const hw = shape.width / 2;
+    const hh = shape.height / 2;
+    const scale = 1 / (Math.abs(dx) / hw + Math.abs(dy) / hh);
+    return {
+      x: cx + dx * scale,
+      y: cy + dy * scale,
+    };
+  }
+
+  // Rectangle (default)
+  const hw = shape.width / 2;
+  const hh = shape.height / 2;
+  const angle = Math.atan2(dy, dx);
+  const tanA = Math.abs(Math.tan(angle));
+
+  if (tanA * hw <= hh) {
+    // Hits left or right edge
+    const signX = dx >= 0 ? 1 : -1;
+    return {
+      x: cx + signX * hw,
+      y: cy + signX * hw * Math.tan(angle),
+    };
+  } else {
+    // Hits top or bottom edge
+    const signY = dy >= 0 ? 1 : -1;
+    return {
+      x: cx + (signY * hh) / Math.tan(angle),
+      y: cy + signY * hh,
+    };
+  }
+}
+
+/**
+ * Apply gap offset — move point away from shape edge by ARROW_GAP pixels.
+ */
+function applyGap(
+  edgePoint: { x: number; y: number },
+  shapeCenter: { x: number; y: number },
+): { x: number; y: number } {
+  const dx = edgePoint.x - shapeCenter.x;
+  const dy = edgePoint.y - shapeCenter.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.001) return edgePoint;
+  return {
+    x: edgePoint.x + (dx / dist) * ARROW_GAP,
+    y: edgePoint.y + (dy / dist) * ARROW_GAP,
+  };
+}
+
+/**
+ * Compute fixedPoint [0-1, 0-1] from an edge point on a shape.
+ * This is the normalized position within the shape's bounding box.
+ */
+function computeFixedPoint(
+  shape: ExcalidrawElement,
+  edgePoint: { x: number; y: number },
+): [number, number] {
+  const fx = shape.width > 0 ? (edgePoint.x - shape.x) / shape.width : 0.5;
+  const fy = shape.height > 0 ? (edgePoint.y - shape.y) / shape.height : 0.5;
+  return [Math.max(0, Math.min(1, fx)), Math.max(0, Math.min(1, fy))];
+}
+
 // ── Position Elements ──
 
 /**
  * Assign x/y positions to all shapes and their bound text elements.
- * Returns the positioned elements + arrow point computation.
- *
- * @param labelMap — maps arrowId to its label text element ID (replaces _labelId hack)
+ * Computes arrow points using geometric edge intersection.
  */
 export function layoutElements(
   shapes: ExcalidrawElement[],
   arrowElements: ExcalidrawElement[],
   rawArrows: SimplifiedArrow[],
   direction: DiagramDirection,
-  labelMap: Map<string, string>
+  labelMap: Map<string, string>,
 ): ExcalidrawElement[] {
   // Build maps
   const shapeMap = new Map<string, ExcalidrawElement>();
-  const textMap = new Map<string, ExcalidrawElement>(); // containerId → text element
+  const textMap = new Map<string, ExcalidrawElement>();
   const shapeIds: string[] = [];
 
   for (const el of shapes) {
@@ -130,7 +228,6 @@ export function layoutElements(
     if (!shape) continue;
 
     const colsInLayer = layerCols.get(node.layer) ?? 1;
-    // Center the layer within the max width
     const layerOffset = ((maxCols - colsInLayer) / 2) * (shape.width + NODE_GAP_X);
 
     if (direction === 'TB') {
@@ -141,7 +238,7 @@ export function layoutElements(
       shape.y = PADDING + layerOffset + node.column * (shape.height + NODE_GAP_Y);
     }
 
-    // Position bound text inside shape
+    // Position bound text inside shape (centered)
     const text = textMap.get(node.id);
     if (text) {
       text.x = shape.x + 5;
@@ -150,7 +247,7 @@ export function layoutElements(
     }
   }
 
-  // Compute arrow points
+  // Compute arrow points using edge intersection
   for (const arrowEl of arrowElements) {
     if (arrowEl.type !== 'arrow') continue;
 
@@ -162,58 +259,49 @@ export function layoutElements(
     const dst = shapeMap.get(dstId);
     if (!src || !dst) continue;
 
-    const srcPoint = getEdgePoint(src, arrowEl.startBinding!.fixedPoint);
-    const dstPoint = getEdgePoint(dst, arrowEl.endBinding!.fixedPoint);
+    const srcCenter = shapeCenter(src);
+    const dstCenter = shapeCenter(dst);
 
-    const dx = dstPoint.x - srcPoint.x;
-    const dy = dstPoint.y - srcPoint.y;
+    // Compute edge intersection points (arrow exits src toward dst, enters dst from src)
+    const srcEdge = computeEdgePoint(src, dstCenter.x, dstCenter.y);
+    const dstEdge = computeEdgePoint(dst, srcCenter.x, srcCenter.y);
 
-    arrowEl.x = srcPoint.x;
-    arrowEl.y = srcPoint.y;
+    // Apply gap
+    const startPt = applyGap(srcEdge, srcCenter);
+    const endPt = applyGap(dstEdge, dstCenter);
 
-    // Route arrow
-    if (direction === 'TB') {
-      if (Math.abs(dx) < 5) {
-        arrowEl.points = [
-          [0, 0],
-          [0, dy],
-        ];
-      } else {
-        const midY = dy / 2;
-        arrowEl.points = [
-          [0, 0],
-          [0, midY],
-          [dx, midY],
-          [dx, dy],
-        ];
-      }
-    } else {
-      if (Math.abs(dy) < 5) {
-        arrowEl.points = [
-          [0, 0],
-          [dx, 0],
-        ];
-      } else {
-        const midX = dx / 2;
-        arrowEl.points = [
-          [0, 0],
-          [midX, 0],
-          [midX, dy],
-          [dx, dy],
-        ];
-      }
+    // Update fixedPoints on bindings to match actual edge positions
+    if (arrowEl.startBinding) {
+      arrowEl.startBinding.fixedPoint = computeFixedPoint(src, srcEdge);
     }
+    if (arrowEl.endBinding) {
+      arrowEl.endBinding.fixedPoint = computeFixedPoint(dst, dstEdge);
+    }
+
+    const dx = endPt.x - startPt.x;
+    const dy = endPt.y - startPt.y;
+
+    // Arrow position is the start point
+    arrowEl.x = startPt.x;
+    arrowEl.y = startPt.y;
+
+    // Arrow points are relative to (x, y)
+    arrowEl.points = [
+      [0, 0],
+      [dx, dy],
+    ];
 
     arrowEl.width = Math.max(Math.abs(dx), 1);
     arrowEl.height = Math.max(Math.abs(dy), 1);
 
-    // Position arrow label at midpoint (using labelMap instead of _labelId hack)
+    // Position arrow label (bound text is auto-centered by Excalidraw,
+    // but we still set approximate position for static rendering)
     const labelId = labelMap.get(arrowEl.id);
     if (labelId) {
       const labelEl = arrowElements.find((e) => e.id === labelId);
       if (labelEl) {
-        labelEl.x = srcPoint.x + dx / 2 - (labelEl.width ?? 40) / 2;
-        labelEl.y = srcPoint.y + dy / 2 - (labelEl.height ?? 16) / 2;
+        labelEl.x = startPt.x + dx / 2 - (labelEl.width ?? 40) / 2;
+        labelEl.y = startPt.y + dy / 2 - (labelEl.height ?? 16) / 2;
       }
     }
   }
@@ -221,27 +309,14 @@ export function layoutElements(
   return [...shapes, ...arrowElements];
 }
 
-// ── Edge Point Calculation ──
-
-function getEdgePoint(
-  shape: ExcalidrawElement,
-  fixedPoint: [number, number]
-): { x: number; y: number } {
-  return {
-    x: shape.x + shape.width * fixedPoint[0],
-    y: shape.y + shape.height * fixedPoint[1],
-  };
-}
-
 // ── Viewport ──
 
 /**
  * Compute viewport (scroll + zoom) to frame all elements with padding.
- * Accepts optional overrides from cameraUpdate pseudo-elements.
  */
 export function computeViewport(
   elements: ExcalidrawElement[],
-  overrides?: ViewportOverrides
+  overrides?: ViewportOverrides,
 ): {
   scrollX: number;
   scrollY: number;
@@ -257,7 +332,7 @@ export function computeViewport(
     maxY = -Infinity;
 
   for (const el of elements) {
-    if (el.type === 'text' && el.containerId) continue; // skip bound text
+    if (el.type === 'text' && el.containerId) continue;
     minX = Math.min(minX, el.x);
     minY = Math.min(minY, el.y);
     maxX = Math.max(maxX, el.x + el.width);
@@ -267,12 +342,10 @@ export function computeViewport(
   const contentWidth = maxX - minX + PADDING * 2;
   const contentHeight = maxY - minY + PADDING * 2;
 
-  // Target viewport (4:3)
   const vpWidth = 1280;
   const vpHeight = 960;
 
   const autoZoom = Math.min(vpWidth / contentWidth, vpHeight / contentHeight, 2.0);
-
   const zoom = overrides?.zoom ?? Math.max(0.1, Math.min(autoZoom, 2.0));
 
   return {
