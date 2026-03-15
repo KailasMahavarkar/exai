@@ -57,6 +57,8 @@ export interface CliConfig {
     filterModel?: string;
     apiKey?: string;
     temperature?: number;
+    /** Provider preset name (openrouter, openai, ollama, etc.) or custom base URL */
+    provider?: string;
 
     // Output
     format?: string;
@@ -99,7 +101,7 @@ export interface CliConfig {
 
 const KNOWN_KEYS = new Set<string>([
     // AI / LLM
-    'model', 'filterModel', 'apiKey', 'temperature',
+    'model', 'filterModel', 'apiKey', 'temperature', 'provider',
     // Output
     'format', 'output', 'direction', 'spacing',
     // Context
@@ -285,6 +287,7 @@ export function loadConfig(configPath: string): CliConfig {
     if (obj.filterModel !== undefined) config.filterModel = assertString(obj, 'filterModel');
     if (obj.apiKey !== undefined) config.apiKey = assertString(obj, 'apiKey');
     if (obj.temperature !== undefined) config.temperature = assertNumber(obj, 'temperature');
+    if (obj.provider !== undefined) config.provider = assertString(obj, 'provider');
 
     // Output
     if (obj.format !== undefined) config.format = assertString(obj, 'format');

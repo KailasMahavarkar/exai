@@ -235,6 +235,8 @@ export interface DiagramPipelineConfig {
     // LLM settings (reused from exai infra)
     model?: string;
     apiKey?: string;
+    /** Provider preset name or custom base URL */
+    provider?: string;
     verbose?: boolean;
     useCache?: boolean;
     timeoutMs?: number;

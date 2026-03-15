@@ -6,7 +6,8 @@
  */
 
 import { getCachedResponse, cacheResponse } from './query-cache.js';
-import { OPENROUTER_API_URL, DEFAULT_MODEL, DEFAULT_TEMPERATURE } from "./contants.js"
+import { DEFAULT_TEMPERATURE, resolveProvider } from "./contants.js"
+import type { ProviderPreset } from "./contants.js"
 
 // ── System Prompts ──────────────────────────────────────────────────────────
 
@@ -136,6 +137,8 @@ export interface CallLLMOptions {
     timeoutMs?: number;
     /** If true, only return from cache — never call the API. Throws on miss. */
     cacheOnly?: boolean;
+    /** Provider preset name or custom base URL */
+    provider?: string;
 }
 
 export interface GenerateOptions {
@@ -148,6 +151,8 @@ export interface GenerateOptions {
     timeoutMs?: number;
     /** If true, only return from cache — never call the API. Throws on miss. */
     cacheOnly?: boolean;
+    /** Provider preset name or custom base URL */
+    provider?: string;
 }
 
 interface DslPlanNode {
@@ -208,19 +213,21 @@ export async function callLLM(
     systemPrompt?: string,
     options: CallLLMOptions = {}
 ): Promise<string> {
+    const preset: ProviderPreset = resolveProvider(options.provider);
+
     const apiKey =
         options.apiKey ||
         process.env.EXAI_OPENROUTER_APIKEY ||
         process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+
+    if (!apiKey && preset.authStyle === 'bearer') {
         throw new Error(
-            'OpenRouter API key is required.\n' +
-            'Provide it via options or set EXAI_OPENROUTER_APIKEY / OPENROUTER_API_KEY environment variable.\n' +
-            'Get your API key from https://openrouter.ai/keys'
+            `API key is required for ${preset.name}.\n` +
+            'Provide it via --api-key, EXAI_OPENROUTER_APIKEY in env/.env, or config "apiKey".'
         );
     }
 
-    const model = options.model || process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+    const model = options.model || process.env.OPENROUTER_MODEL || preset.defaultModel;
     const temperature = options.temperature ?? DEFAULT_TEMPERATURE;
     const system = systemPrompt || 'You are a helpful assistant.';
     const useCache = options.useCache !== false;
@@ -244,10 +251,20 @@ export async function callLLM(
     const timeoutMs = options.timeoutMs ?? 120_000;
 
     if (options.verbose) {
+        console.log(`  Provider: ${preset.name} (${preset.baseUrl})`);
         console.log(`  Calling ${model}...`);
         console.log(`  Temperature: ${temperature}`);
         console.log(`  Prompt size: ${(userPrompt.length / 1024).toFixed(1)}KB`);
         console.log(`  Timeout: ${timeoutMs / 1000}s`);
+    }
+
+    // Build headers
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(preset.headers ?? {}),
+    };
+    if (preset.authStyle === 'bearer' && apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
     const controller = new AbortController();
@@ -255,14 +272,9 @@ export async function callLLM(
 
     let response: Response;
     try {
-        response = await fetch(OPENROUTER_API_URL, {
+        response = await fetch(preset.baseUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
-                'HTTP-Referer': 'https://github.com/KailasMahavarkar/exai',
-                'X-Title': 'exai',
-            },
+            headers,
             body: JSON.stringify({
                 model,
                 temperature,
@@ -284,7 +296,7 @@ export async function callLLM(
 
     if (!response.ok) {
         const error = await response.text();
-        throw new Error(`OpenRouter API error (${response.status}): ${error}`);
+        throw new Error(`${preset.name} API error (${response.status}): ${error}`);
     }
 
     if (options.verbose) console.log(`  Response received`);
@@ -295,7 +307,7 @@ export async function callLLM(
     const output = data.choices?.[0]?.message?.content;
 
     if (!output) {
-        throw new Error('OpenRouter API returned empty response');
+        throw new Error(`${preset.name} API returned empty response`);
     }
 
     // Cache response
@@ -354,6 +366,7 @@ Remember: Base your diagram ONLY on the code provided between the BEGIN/END mark
             cacheContext: options.context,
             timeoutMs: options.timeoutMs,
             cacheOnly: options.cacheOnly,
+            provider: options.provider,
         });
 
         if (options.verbose) console.log(`  Rebuilding DSL from normalized plan...`);
@@ -377,6 +390,7 @@ Remember: Base your diagram ONLY on the code provided between the BEGIN/END mark
         cacheContext: options.context,
         timeoutMs: options.timeoutMs,
         cacheOnly: options.cacheOnly,
+        provider: options.provider,
     });
 
     if (options.verbose) console.log(`  Cleaning and validating output...`);

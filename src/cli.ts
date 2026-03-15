@@ -398,8 +398,9 @@ program
     .option('-d, --direction <dir>', 'Flow direction: TB, BT, LR, RL')
     .option('-s, --spacing <n>', 'Node spacing in pixels')
     .option('-c, --context <path>', 'Include file or folder as context (can be used multiple times)', (value, previous: string[]) => previous.concat([value]), [] as string[])
-    .option('--model <model>', 'OpenRouter model (default: moonshotai/kimi-k2.5)')
-    .option('--api-key <key>', `OpenRouter API key (overrides ${EXAI_API_KEY_ENV} from env/.env)`)
+    .option('--model <model>', 'LLM model (default depends on provider)')
+    .option('--api-key <key>', `API key (overrides ${EXAI_API_KEY_ENV} from env/.env)`)
+    .option('--provider <name>', 'Provider: openrouter, openai, ollama, groq, deepseek, together, lmstudio, or a URL')
     .option('--temperature <n>', 'Model temperature 0-2 (default: 0)', '0')
     .option('--exclude <pattern>', 'Exclude pattern for context gathering (can be used multiple times)', (value: string, previous: string[]) => previous.concat([value]), [] as string[])
     .option('--allow-test-files', 'Include test files in context (default: excluded)')
@@ -434,6 +435,7 @@ program
                 // AI / LLM
                 if (config.model !== undefined && src('model') !== 'cli') options.model = config.model;
                 if (config.temperature !== undefined && src('temperature') !== 'cli') options.temperature = String(config.temperature);
+                if (config.provider !== undefined && src('provider') !== 'cli') options.provider = config.provider;
 
                 // Output
                 if (config.format !== undefined && src('format') !== 'cli') options.format = config.format;
@@ -489,25 +491,28 @@ program
                 process.exit(1);
             }
 
+            // Determine provider first (affects whether API key is required)
+            const { resolveProvider } = await import('./ai/contants.js');
+            const provider = resolveProvider(options.provider);
+
             const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(options.apiKey, config.apiKey, command);
-            if (!resolvedApiKey) {
+            if (!resolvedApiKey && provider.authStyle === 'bearer') {
                 console.error('⚠️  Missing API key.');
                 console.error(`Set it via --api-key, ${EXAI_API_KEY_ENV} in .env/env, or config file "apiKey".`);
                 process.exitCode = 1;
                 return;
             }
             options.apiKey = resolvedApiKey;
-            if (options.verbose) {
+            if (options.verbose && resolvedApiKey) {
                 console.log(`🔑 API key source: ${apiKeySource}`);
             }
-
-            // Determine model to use
-            const model = options.model || process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2.5';
+            const model = options.model || process.env.OPENROUTER_MODEL || provider.defaultModel;
 
             console.log('🚀 Excalidraw AI Generation Started');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log(`📝 Prompt: ${prompt}`);
             console.log(`🤖 Model: ${model}`);
+            if (options.provider) console.log(`🔌 Provider: ${provider.name}`);
             console.log(`📊 Format: ${format.toUpperCase()}`);
             if (options.context && options.context.length > 0) {
                 console.log(`📁 Context: ${options.context.length} path(s)`);
@@ -641,6 +646,7 @@ program
                     useCache: options.cache !== false,
                     cacheOnly: isRedraw,
                     timeoutMs: config.timeoutSecs !== undefined ? config.timeoutSecs * 1000 : undefined,
+                    provider: options.provider,
                 });
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
@@ -808,9 +814,10 @@ program
     .option('--style <style>', 'Visual style: hand-drawn or clean', 'hand-drawn')
     .option('--theme <theme>', 'Color theme: light or dark', 'light')
     .option('--model <model>', 'LLM model to use')
+    .option('--provider <name>', 'Provider: openrouter, openai, ollama, groq, deepseek, together, lmstudio, or a URL')
     .option('--json <file>', 'JSON file with simplified elements (deterministic mode)')
     .option('--stdin', 'Read element JSON from stdin')
-    .option('--api-key <key>', 'OpenRouter API key')
+    .option('--api-key <key>', 'API key')
     .option('--checkpoint <name>', 'Save diagram state as a named checkpoint')
     .option('--from-checkpoint <name>', 'Load a checkpoint as base, merge new elements on top')
     .option('--no-cache', 'Disable response cache')
@@ -844,9 +851,11 @@ program
                     console.error('Error: prompt is required in AI mode. Use --json or --stdin for deterministic mode.');
                     process.exit(1);
                 }
+                const { resolveProvider: rp } = await import('./ai/contants.js');
+                const prov = rp(options.provider || config.provider);
                 const resolved = resolveApiKey(options.apiKey, config.apiKey, command);
                 apiKey = resolved.apiKey;
-                if (!apiKey) {
+                if (!apiKey && prov.authStyle === 'bearer') {
                     console.error('Error: API key required. Set EXAI_OPENROUTER_APIKEY or use --api-key.');
                     process.exit(1);
                 }
@@ -870,6 +879,7 @@ program
                 output,
                 model: options.model || config.model,
                 apiKey,
+                provider: options.provider || config.provider,
                 verbose: isVerbose,
                 useCache: options.cache !== false && config.cache !== false,
                 timeoutMs: (config.timeoutSecs ?? 120) * 1000,
@@ -1046,6 +1056,25 @@ program
             console.error('Error:', error instanceof Error ? error.message : error);
             process.exit(1);
         }
+    });
+
+/**
+ * Providers command — list available LLM providers
+ */
+program
+    .command('providers')
+    .description('List available LLM providers and their defaults')
+    .action(async () => {
+        const { PROVIDER_PRESETS } = await import('./ai/contants.js');
+        console.log('\n  Available Providers:\n');
+        for (const [key, preset] of Object.entries(PROVIDER_PRESETS)) {
+            const auth = preset.authStyle === 'none' ? ' (no API key needed)' : '';
+            console.log(`  ${key.padEnd(14)} ${preset.name}${auth}`);
+            console.log(`  ${''.padEnd(14)} Model: ${preset.defaultModel}`);
+            console.log(`  ${''.padEnd(14)} URL:   ${preset.baseUrl}`);
+            console.log();
+        }
+        console.log('  Custom: pass any OpenAI-compatible URL as --provider\n');
     });
 
 // Parse arguments and run

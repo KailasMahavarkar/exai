@@ -70,6 +70,10 @@ export { saveCheckpoint, loadCheckpoint, listCheckpoints, removeCheckpoint } fro
 export { PALETTES, ELEMENT_FORMAT, SIZING, TIPS } from './reference/data.js';
 export { renderReference, getReferenceData } from './reference/render.js';
 
+// Provider exports
+export { PROVIDER_PRESETS, resolveProvider } from './ai/contants.js';
+export type { ProviderPreset } from './ai/contants.js';
+
 // Config exports
 export { loadConfig, CONFIG_TEMPLATE } from './ai/config.js';
 export type { CliConfig, DiagramConfig } from './ai/config.js';

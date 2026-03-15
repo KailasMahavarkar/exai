@@ -81,6 +81,7 @@ export async function runDiagramPipeline(
                 cacheFormat: 'diagram',
                 cacheContext: config.prompt,
                 timeoutMs: config.timeoutMs ?? 60000,
+                provider: config.provider,
             })
         );
     }

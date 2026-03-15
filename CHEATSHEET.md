@@ -15,6 +15,7 @@
 | `exai share` | Upload to excalidraw.com (e2e encrypted) |
 | `exai checkpoint` | Manage saved diagram states |
 | `exai reference` | Built-in element & color reference |
+| `exai providers` | List available LLM providers |
 | `exai cache` | Manage LLM response cache |
 | `exai init` | Create starter config file |
 | `exai parse` | Parse and validate input |
@@ -51,8 +52,9 @@ exai diagram "microservice architecture" \
 | `--theme <theme>` | `light` | `light` or `dark` |
 | `--json <file>` | — | JSON file (deterministic mode) |
 | `--stdin` | — | Read JSON from stdin |
-| `--model <model>` | config/default | OpenRouter model |
-| `--api-key <key>` | env/config | OpenRouter API key |
+| `--model <model>` | config/default | LLM model (default depends on provider) |
+| `--api-key <key>` | env/config | API key |
+| `--provider <name>` | `openrouter` | Provider preset or custom URL |
 | `--checkpoint <name>` | — | Save diagram state after generation |
 | `--from-checkpoint <name>` | — | Load checkpoint, merge new elements on top |
 | `--no-cache` | — | Disable response cache |
@@ -299,6 +301,7 @@ Create with `exai init` or manually at `exai.config.json` (auto-detected).
 ```json
 {
   "model": "moonshotai/kimi-k2.5",
+  "provider": "openrouter",
   "apiKey": "sk-or-v1-...",
   "temperature": 0,
   "format": "dsl",
@@ -335,6 +338,44 @@ Create with `exai init` or manually at `exai.config.json` (auto-detected).
 ```
 
 Priority: **CLI flags > env/.env > config file > defaults**
+
+---
+
+## Providers
+
+Use `--provider` to switch between LLM providers. All use the OpenAI chat completions format.
+
+```bash
+# List all providers
+exai providers
+
+# Use different providers
+exai diagram "auth flow" --provider openai --model gpt-4o --api-key sk-...
+exai diagram "auth flow" --provider groq --model llama-3.3-70b-versatile
+exai diagram "auth flow" --provider deepseek --model deepseek-chat
+exai diagram "auth flow" --provider together
+
+# Local models (no API key needed)
+exai diagram "auth flow" --provider ollama --model llama3.2
+exai diagram "auth flow" --provider lmstudio
+
+# Custom OpenAI-compatible endpoint
+exai diagram "auth flow" --provider http://my-server:8080/v1/chat/completions
+
+# Set in config file
+# "provider": "groq"
+```
+
+| Provider | Default Model | API Key |
+|----------|---------------|---------|
+| `openrouter` (default) | `moonshotai/kimi-k2.5` | Required |
+| `openai` | `gpt-4o-mini` | Required |
+| `groq` | `llama-3.3-70b-versatile` | Required |
+| `deepseek` | `deepseek-chat` | Required |
+| `together` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Required |
+| `anthropic` | `claude-sonnet-4-6` | Required |
+| `ollama` | `llama3.2` | Not needed |
+| `lmstudio` | `local-model` | Not needed |
 
 ---
 
