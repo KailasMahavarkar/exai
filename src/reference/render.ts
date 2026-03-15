@@ -2,11 +2,18 @@
  * Render reference data for terminal output or JSON export.
  */
 
-import { PALETTES, ELEMENT_FORMAT, SIZING, TIPS } from './data.js';
+import { PALETTES, COLOR_SCHEMES, ELEMENT_FORMAT, SIZING, TIPS } from './data.js';
 
-type Section = 'colors' | 'elements' | 'sizing' | 'tips' | 'all';
+type Section = 'colors' | 'elements' | 'sizing' | 'tips' | 'schemes' | 'all';
 
-const VALID_SECTIONS = new Set<string>(['colors', 'elements', 'sizing', 'tips', 'all']);
+const VALID_SECTIONS = new Set<string>([
+  'colors',
+  'elements',
+  'sizing',
+  'tips',
+  'schemes',
+  'all',
+]);
 
 function validateSection(section: string): Section {
   if (!VALID_SECTIONS.has(section)) {
@@ -87,6 +94,18 @@ function renderSizing(): void {
   }
 }
 
+function renderSchemes(): void {
+  console.log('\n  ## Color Schemes\n');
+
+  for (const [name, roles] of Object.entries(COLOR_SCHEMES)) {
+    console.log(`  ### ${name}`);
+    for (const [role, colors] of Object.entries(roles)) {
+      console.log(`    ${role.padEnd(12)} bg: ${colors.bg}  stroke: ${colors.stroke}`);
+    }
+    console.log();
+  }
+}
+
 function renderTips(): void {
   console.log('\n  ## Tips\n');
   for (let i = 0; i < TIPS.length; i++) {
@@ -104,6 +123,7 @@ export function renderReference(sectionRaw: string): void {
   console.log('  ━'.repeat(20));
 
   if (section === 'all' || section === 'colors') renderColors();
+  if (section === 'all' || section === 'schemes') renderSchemes();
   if (section === 'all' || section === 'elements') renderElements();
   if (section === 'all' || section === 'sizing') renderSizing();
   if (section === 'all' || section === 'tips') renderTips();
@@ -119,6 +139,7 @@ export function getReferenceData(sectionRaw: string): Record<string, unknown> {
   const data: Record<string, unknown> = {};
 
   if (section === 'all' || section === 'colors') data.palettes = PALETTES;
+  if (section === 'all' || section === 'schemes') data.colorSchemes = COLOR_SCHEMES;
   if (section === 'all' || section === 'elements') data.elementFormat = ELEMENT_FORMAT;
   if (section === 'all' || section === 'sizing') data.sizing = SIZING;
   if (section === 'all' || section === 'tips') data.tips = TIPS;

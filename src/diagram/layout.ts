@@ -328,14 +328,17 @@ export function layoutElements(
     arrowEl.width = Math.max(Math.abs(dx), 1);
     arrowEl.height = Math.max(Math.abs(dy), 1);
 
-    // Position arrow label (bound text is auto-centered by Excalidraw,
-    // but we still set approximate position for static rendering)
+    // Position arrow label at midpoint for static export rendering.
+    // containerId binding handles live Excalidraw positioning,
+    // but @excalidraw/utils needs explicit x/y for PNG/SVG export.
     const labelId = labelMap.get(arrowEl.id);
     if (labelId) {
       const labelEl = arrowElements.find((e) => e.id === labelId);
       if (labelEl) {
-        labelEl.x = startPt.x + dx / 2 - (labelEl.width ?? 40) / 2;
-        labelEl.y = startPt.y + dy / 2 - (labelEl.height ?? 16) / 2;
+        const midX = startPt.x + dx / 2;
+        const midY = startPt.y + dy / 2;
+        labelEl.x = midX - (labelEl.width ?? 40) / 2;
+        labelEl.y = midY - (labelEl.height ?? 16) / 2;
       }
     }
   }

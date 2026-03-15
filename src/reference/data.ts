@@ -58,6 +58,65 @@ export const PALETTES = {
   },
 } as const;
 
+// ── Color Schemes ──
+
+export const COLOR_SCHEMES = {
+  ocean: {
+    primary: { bg: '#a5d8ff', stroke: '#1971c2' },
+    secondary: { bg: '#99e9f2', stroke: '#0c8599' },
+    accent: { bg: '#d0bfff', stroke: '#7048e8' },
+    muted: { bg: '#e9ecef', stroke: '#868e96' },
+    success: { bg: '#b2f2bb', stroke: '#2f9e44' },
+    warning: { bg: '#ffec99', stroke: '#f08c00' },
+    danger: { bg: '#ffc9c9', stroke: '#e03131' },
+  },
+  earth: {
+    primary: { bg: '#ffd8a8', stroke: '#e8590c' },
+    secondary: { bg: '#b2f2bb', stroke: '#2f9e44' },
+    accent: { bg: '#ffec99', stroke: '#f08c00' },
+    muted: { bg: '#e9ecef', stroke: '#868e96' },
+    success: { bg: '#d3f9d8', stroke: '#40c057' },
+    warning: { bg: '#fff3bf', stroke: '#fab005' },
+    danger: { bg: '#ffc9c9', stroke: '#e03131' },
+  },
+  sunset: {
+    primary: { bg: '#ffc9c9', stroke: '#e03131' },
+    secondary: { bg: '#ffd8a8', stroke: '#e8590c' },
+    accent: { bg: '#ffec99', stroke: '#f08c00' },
+    muted: { bg: '#e9ecef', stroke: '#868e96' },
+    success: { bg: '#b2f2bb', stroke: '#2f9e44' },
+    warning: { bg: '#fff3bf', stroke: '#fab005' },
+    danger: { bg: '#e599f7', stroke: '#9c36b5' },
+  },
+  neon: {
+    primary: { bg: '#74b9ff', stroke: '#0984e3' },
+    secondary: { bg: '#81ecec', stroke: '#00cec9' },
+    accent: { bg: '#a29bfe', stroke: '#6c5ce7' },
+    muted: { bg: '#dfe6e9', stroke: '#636e72' },
+    success: { bg: '#55efc4', stroke: '#00b894' },
+    warning: { bg: '#ffeaa7', stroke: '#fdcb6e' },
+    danger: { bg: '#fab1a0', stroke: '#e17055' },
+  },
+  mono: {
+    primary: { bg: '#dee2e6', stroke: '#495057' },
+    secondary: { bg: '#e9ecef', stroke: '#868e96' },
+    accent: { bg: '#ced4da', stroke: '#343a40' },
+    muted: { bg: '#f8f9fa', stroke: '#adb5bd' },
+    success: { bg: '#dee2e6', stroke: '#495057' },
+    warning: { bg: '#e9ecef', stroke: '#868e96' },
+    danger: { bg: '#ced4da', stroke: '#343a40' },
+  },
+  candy: {
+    primary: { bg: '#fcc2d7', stroke: '#c2255c' },
+    secondary: { bg: '#d0bfff', stroke: '#7048e8' },
+    accent: { bg: '#a5d8ff', stroke: '#1971c2' },
+    muted: { bg: '#e9ecef', stroke: '#868e96' },
+    success: { bg: '#96f2d7', stroke: '#12b886' },
+    warning: { bg: '#ffec99', stroke: '#f08c00' },
+    danger: { bg: '#ffa8a8', stroke: '#c92a2a' },
+  },
+} as const;
+
 // ── Element Format ──
 
 export const ELEMENT_FORMAT = {

@@ -72,7 +72,7 @@ export {
 } from './diagram/checkpoint.js';
 
 // Reference exports
-export { PALETTES, ELEMENT_FORMAT, SIZING, TIPS } from './reference/data.js';
+export { PALETTES, COLOR_SCHEMES, ELEMENT_FORMAT, SIZING, TIPS } from './reference/data.js';
 export { renderReference, getReferenceData } from './reference/render.js';
 
 // Auth/session exports
