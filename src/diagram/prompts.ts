@@ -36,7 +36,7 @@ Labels can be a string or an object for fine control:
 - String: "My Label"
 - Object: { "text": "My Label", "fontSize": 20, "fontFamily": 2, "strokeColor": "#c92a2a" }
   - fontSize: pixel size (default 16)
-  - fontFamily: 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code)
+  - fontFamily: 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code), 5=Excalifont, 6=Nunito, 7=Lilita One, 8=Comic Shanns
   - strokeColor: hex text color
 
 ## Optional shape properties
@@ -52,6 +52,11 @@ Labels can be a string or an object for fine control:
 - routing: "round" (curved, default), "elbow" (right-angle), "sharp" (straight)
 - roughness: 0 (architect), 1 (artist, default), 2 (cartoonist)
 - strokeWidth: 1 (thin), 2 (bold, default), 4 (extra bold)
+
+## Zones (visual grouping)
+- { "type": "zone", "id": "zone-1", "label": "Frontend Layer", "children": ["react-app", "cdn"], "backgroundColor": "#e9ecef", "strokeColor": "#868e96" }
+- Zones render as dashed background rectangles behind their children
+- Use opacity 25-40 for subtle grouping
 
 ## Pseudo-elements (optional)
 

@@ -77,7 +77,15 @@ export const ELEMENT_FORMAT = {
   labelFormat: {
     string: '"My Label"',
     object: '{ "text": "My Label", "fontSize": 20, "fontFamily": 2, "strokeColor": "#c92a2a" }',
-    fontFamilies: { 1: 'Virgil (hand)', 2: 'Helvetica', 3: 'Cascadia (code)', 5: 'Excalifont' },
+    fontFamilies: {
+      1: 'Virgil (hand)',
+      2: 'Helvetica',
+      3: 'Cascadia (code)',
+      5: 'Excalifont',
+      6: 'Nunito',
+      7: 'Lilita One',
+      8: 'Comic Shanns',
+    },
   },
   pseudoElements: [
     { type: 'cameraUpdate', fields: 'zoom?, scrollX?, scrollY?', use: 'Override viewport' },
@@ -89,13 +97,15 @@ export const ELEMENT_FORMAT = {
 // ── Sizing Rules ──
 
 export const SIZING = {
-  defaultShapeWidth: 200,
-  defaultShapeHeight: 80,
+  defaultShapeWidth: 230,
+  defaultShapeHeight: 100,
+  defaultDiamondWidth: 200,
+  defaultDiamondHeight: 120,
   defaultFontSize: 16,
   arrowLabelFontSize: 13,
-  nodeGapX: 80,
-  nodeGapY: 100,
-  padding: 60,
+  nodeGapX: 150,
+  nodeGapY: 150,
+  padding: 80,
   lineHeight: 1.25,
   charWidthEstimate: 8,
 } as const;

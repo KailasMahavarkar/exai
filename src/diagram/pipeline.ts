@@ -123,9 +123,11 @@ export async function runDiagramPipeline(
 
   // Step 4: Expand labels
   onProgress?.('Expanding labels...');
-  const { excalidraw: shapes, arrows: rawArrows } = time('Expand', () =>
-    expandLabels(mergedElements, theme)
-  );
+  const {
+    excalidraw: shapes,
+    arrows: rawArrows,
+    zones,
+  } = time('Expand', () => expandLabels(mergedElements, theme));
 
   // Step 5: Apply defaults
   const styled = time('Style', () => applyDefaults(shapes, config.style));
@@ -139,7 +141,7 @@ export async function runDiagramPipeline(
   // Step 7: Layout
   onProgress?.('Computing layout...');
   const positioned = time('Layout', () =>
-    layoutElements(styled, arrowElements, rawArrows, config.direction, labelMap)
+    layoutElements(styled, arrowElements, rawArrows, config.direction, labelMap, zones)
   );
 
   // Step 8: Build file

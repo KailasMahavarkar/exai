@@ -12,6 +12,7 @@ import type {
   SimplifiedElement,
   SimplifiedShape,
   SimplifiedArrow,
+  SimplifiedZone,
   ExcalidrawElement,
   DiagramStyle,
   DiagramDirection,
@@ -26,8 +27,10 @@ import { STYLE_PRESETS, THEME_PRESETS, normalizeLabel } from './types.js';
 
 // ── Constants ──
 
-const DEFAULT_SHAPE_WIDTH = 200;
-const DEFAULT_SHAPE_HEIGHT = 80;
+const DEFAULT_SHAPE_WIDTH = 230;
+const DEFAULT_SHAPE_HEIGHT = 100;
+const DEFAULT_DIAMOND_WIDTH = 200;
+const DEFAULT_DIAMOND_HEIGHT = 120;
 const DEFAULT_FONT_SIZE = 16;
 const ARROW_LABEL_FONT_SIZE = 13;
 const LINE_HEIGHT = 1.25;
@@ -74,6 +77,11 @@ export function parseElements(raw: string): DiagramInputElement[] {
       if (!el.from || !el.to) {
         throw new Error(`Arrow missing "from" or "to": ${JSON.stringify(el)}`);
       }
+    } else if (el.type === 'zone') {
+      if (!el.id) throw new Error(`Zone missing "id": ${JSON.stringify(el)}`);
+      if (!el.label) throw new Error(`Zone missing "label": ${JSON.stringify(el)}`);
+      if (!Array.isArray(el.children))
+        throw new Error(`Zone missing "children": ${JSON.stringify(el)}`);
     } else {
       if (!el.id) throw new Error(`Shape missing "id": ${JSON.stringify(el)}`);
       if (!el.label) throw new Error(`Shape missing "label": ${JSON.stringify(el)}`);
@@ -232,14 +240,68 @@ export function expandLabels(
 ): {
   excalidraw: ExcalidrawElement[];
   arrows: SimplifiedArrow[];
+  zones: SimplifiedZone[];
 } {
   const colors = getThemeColors(theme);
   const result: ExcalidrawElement[] = [];
   const arrows: SimplifiedArrow[] = [];
+  const zones: SimplifiedZone[] = [];
 
   for (const el of elements) {
     if (el.type === 'arrow') {
       arrows.push(el);
+      continue;
+    }
+
+    if (el.type === 'zone') {
+      const zone = el as SimplifiedZone;
+      zones.push(zone);
+
+      // Create a placeholder rectangle for the zone (position/size computed in layout)
+      result.push(
+        baseElement(
+          {
+            id: zone.id,
+            type: 'rectangle',
+            strokeStyle: 'dashed',
+            opacity: zone.opacity ?? 30,
+            roughness: 0,
+            backgroundColor: zone.backgroundColor ?? 'transparent',
+            strokeColor: zone.strokeColor ?? colors.defaultStrokeColor,
+            boundElements: [{ type: 'text', id: `${zone.id}-text` }],
+          },
+          theme
+        )
+      );
+
+      // Zone label text
+      const labelSize = estimateTextSize(zone.label, DEFAULT_FONT_SIZE);
+      result.push(
+        baseElement(
+          {
+            id: `${zone.id}-text`,
+            type: 'text',
+            width: labelSize.width,
+            height: labelSize.height,
+            strokeColor: zone.strokeColor ?? colors.defaultTextColor,
+            backgroundColor: 'transparent',
+            strokeWidth: 1,
+            roundness: null,
+            boundElements: null,
+            text: zone.label,
+            fontSize: DEFAULT_FONT_SIZE,
+            fontFamily: 1,
+            textAlign: 'left',
+            verticalAlign: 'top',
+            containerId: zone.id,
+            originalText: zone.label,
+            lineHeight: LINE_HEIGHT,
+            baseline: Math.round(DEFAULT_FONT_SIZE * LINE_HEIGHT),
+          },
+          theme
+        )
+      );
+
       continue;
     }
 
@@ -249,8 +311,10 @@ export function expandLabels(
     const fontSize = richLabel.fontSize ?? DEFAULT_FONT_SIZE;
     const textSize = estimateTextSize(richLabel.text, fontSize);
 
-    const shapeWidth = shape.width ?? Math.max(DEFAULT_SHAPE_WIDTH, textSize.width + 40);
-    const shapeHeight = shape.height ?? DEFAULT_SHAPE_HEIGHT;
+    const defaultWidth = shape.type === 'diamond' ? DEFAULT_DIAMOND_WIDTH : DEFAULT_SHAPE_WIDTH;
+    const defaultHeight = shape.type === 'diamond' ? DEFAULT_DIAMOND_HEIGHT : DEFAULT_SHAPE_HEIGHT;
+    const shapeWidth = shape.width ?? Math.max(defaultWidth, textSize.width + 40);
+    const shapeHeight = shape.height ?? defaultHeight;
 
     // Shape element
     result.push(
@@ -262,6 +326,7 @@ export function expandLabels(
           height: shapeHeight,
           backgroundColor: shape.backgroundColor ?? 'transparent',
           strokeColor: shape.strokeColor ?? colors.defaultStrokeColor,
+          opacity: shape.opacity ?? 100,
           boundElements: [{ type: 'text', id: textId }],
         },
         theme
@@ -298,7 +363,7 @@ export function expandLabels(
     );
   }
 
-  return { excalidraw: result, arrows };
+  return { excalidraw: result, arrows, zones };
 }
 
 // ── Apply Defaults ──

@@ -25,6 +25,9 @@ export default [
         clearTimeout: 'readonly',
         Blob: 'readonly',
         btoa: 'readonly',
+        TextEncoder: 'readonly',
+        DataView: 'readonly',
+        Uint8Array: 'readonly',
       },
     },
     plugins: {

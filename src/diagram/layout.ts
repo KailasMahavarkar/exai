@@ -9,15 +9,16 @@
 import type {
   ExcalidrawElement,
   SimplifiedArrow,
+  SimplifiedZone,
   DiagramDirection,
   ViewportOverrides,
 } from './types.js';
 
 // ── Constants ──
 
-const NODE_GAP_X = 80;
-const NODE_GAP_Y = 100;
-const PADDING = 60;
+const NODE_GAP_X = 150;
+const NODE_GAP_Y = 150;
+const PADDING = 80;
 const ARROW_GAP = 8; // gap between arrow endpoint and shape edge
 
 // ── Topological Sort ──
@@ -101,7 +102,7 @@ function shapeCenter(shape: ExcalidrawElement): { x: number; y: number } {
 function computeEdgePoint(
   shape: ExcalidrawElement,
   targetX: number,
-  targetY: number,
+  targetY: number
 ): { x: number; y: number } {
   const cx = shape.x + shape.width / 2;
   const cy = shape.y + shape.height / 2;
@@ -160,7 +161,7 @@ function computeEdgePoint(
  */
 function applyGap(
   edgePoint: { x: number; y: number },
-  shapeCenter: { x: number; y: number },
+  shapeCenter: { x: number; y: number }
 ): { x: number; y: number } {
   const dx = edgePoint.x - shapeCenter.x;
   const dy = edgePoint.y - shapeCenter.y;
@@ -178,7 +179,7 @@ function applyGap(
  */
 function computeFixedPoint(
   shape: ExcalidrawElement,
-  edgePoint: { x: number; y: number },
+  edgePoint: { x: number; y: number }
 ): [number, number] {
   const fx = shape.width > 0 ? (edgePoint.x - shape.x) / shape.width : 0.5;
   const fy = shape.height > 0 ? (edgePoint.y - shape.y) / shape.height : 0.5;
@@ -197,6 +198,7 @@ export function layoutElements(
   rawArrows: SimplifiedArrow[],
   direction: DiagramDirection,
   labelMap: Map<string, string>,
+  zones?: SimplifiedZone[]
 ): ExcalidrawElement[] {
   // Build maps
   const shapeMap = new Map<string, ExcalidrawElement>();
@@ -244,6 +246,38 @@ export function layoutElements(
       text.x = shape.x + 5;
       text.y = shape.y + (shape.height - (text.height ?? 20)) / 2;
       text.width = shape.width - 10;
+    }
+  }
+
+  // Compute zone rectangles based on children positions
+  if (zones && zones.length > 0) {
+    for (const zone of zones) {
+      const children = zone.children
+        .map((id) => shapeMap.get(id))
+        .filter((s): s is ExcalidrawElement => s !== undefined);
+
+      if (children.length === 0) continue;
+
+      const minX = Math.min(...children.map((c) => c.x)) - 50;
+      const minY = Math.min(...children.map((c) => c.y)) - 55;
+      const maxX = Math.max(...children.map((c) => c.x + c.width)) + 60;
+      const maxY = Math.max(...children.map((c) => c.y + c.height)) + 60;
+
+      // Find the zone rectangle element and update its position/size
+      const zoneEl = shapes.find((el) => el.id === zone.id);
+      if (zoneEl) {
+        zoneEl.x = minX;
+        zoneEl.y = minY;
+        zoneEl.width = maxX - minX;
+        zoneEl.height = maxY - minY;
+      }
+
+      // Position zone label text at top-left
+      const zoneLabelEl = shapes.find((el) => el.id === `${zone.id}-text`);
+      if (zoneLabelEl) {
+        zoneLabelEl.x = minX + 10;
+        zoneLabelEl.y = minY + 10;
+      }
     }
   }
 
@@ -316,7 +350,7 @@ export function layoutElements(
  */
 export function computeViewport(
   elements: ExcalidrawElement[],
-  overrides?: ViewportOverrides,
+  overrides?: ViewportOverrides
 ): {
   scrollX: number;
   scrollY: number;

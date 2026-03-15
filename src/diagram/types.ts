@@ -14,7 +14,7 @@
 export interface RichLabel {
   text: string;
   fontSize?: number;
-  /** 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code), 5=Excalifont */
+  /** 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code), 5=Excalifont, 6=Nunito, 7=Lilita One, 8=Comic Shanns */
   fontFamily?: number;
   strokeColor?: string;
 }
@@ -73,6 +73,8 @@ export interface SimplifiedShape {
   height?: number;
   /** Group label — shapes with the same group are visually grouped */
   group?: string;
+  /** Opacity 0-100 (default 100, use 25-40 for zone backgrounds) */
+  opacity?: number;
 }
 
 export interface SimplifiedArrow {
@@ -92,7 +94,19 @@ export interface SimplifiedArrow {
   strokeWidth?: number;
 }
 
-export type SimplifiedElement = SimplifiedShape | SimplifiedArrow;
+export interface SimplifiedZone {
+  type: 'zone';
+  id: string;
+  label: string;
+  /** IDs of shapes contained in this zone */
+  children: string[];
+  backgroundColor?: string;
+  strokeColor?: string;
+  /** Opacity 0-100 (default 30) */
+  opacity?: number;
+}
+
+export type SimplifiedElement = SimplifiedShape | SimplifiedArrow | SimplifiedZone;
 
 // ── Pseudo-elements ──
 
