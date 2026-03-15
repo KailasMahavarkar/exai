@@ -66,6 +66,9 @@ export const THEME_PRESETS: Record<DiagramTheme, ThemeColors> = {
 export interface SimplifiedShape {
   type: 'rectangle' | 'ellipse' | 'diamond';
   id: string;
+  /** Text label on the shape (Excalidraw native). Use \n for multiline. */
+  text?: LabelValue;
+  /** Shape label (always set after normalization) */
   label: LabelValue;
   backgroundColor?: string;
   strokeColor?: string;
@@ -80,22 +83,27 @@ export interface SimplifiedShape {
 export interface SimplifiedArrow {
   type: 'arrow';
   id?: string;
+  /** Source shape ID (Excalidraw native) */
+  startElementId?: string;
+  /** Target shape ID (Excalidraw native) */
+  endElementId?: string;
+  /** Source shape ID (legacy alias for startElementId) */
   from: string;
+  /** Target shape ID (legacy alias for endElementId) */
   to: string;
+  /** Label text on the arrow */
+  text?: string;
+  /** Arrow label (legacy alias for text) */
   label?: string;
   strokeColor?: string;
   /** 'solid' | 'dashed' | 'dotted' */
   strokeStyle?: string;
-  /** 'elbow' | 'round' | 'sharp' — arrow routing (default: style-dependent) */
+  /** 'elbow' | 'round' | 'sharp' — arrow routing (default: round) */
   routing?: string;
-  /** 0=architect | 1=artist | 2=cartoonist — sloppiness (default: style-dependent) */
+  /** 0=architect | 1=artist | 2=cartoonist */
   roughness?: number;
-  /** 1=thin | 2=bold | 4=extra bold (default: style-dependent) */
+  /** 1=thin | 2=bold | 4=extra bold */
   strokeWidth?: number;
-  /** Alias for from (Excalidraw native format) */
-  startElementId?: string;
-  /** Alias for to (Excalidraw native format) */
-  endElementId?: string;
 }
 
 export interface SimplifiedText {

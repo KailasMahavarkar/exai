@@ -1,11 +1,11 @@
 [
-  { "type": "rectangle", "id": "gs", "label": "Gap Scanner", "backgroundColor": "#a5d8ff" },
-  { "type": "rectangle", "id": "pg", "label": "Prompt Generator", "backgroundColor": "#a5d8ff" },
-  { "type": "rectangle", "id": "ks", "label": "KSampler", "backgroundColor": "#e9ecef" },
-  { "type": "rectangle", "id": "vae", "label": "VAE Decode", "backgroundColor": "#e9ecef" },
-  { "type": "rectangle", "id": "sa", "label": "Save As", "backgroundColor": "#a5d8ff" },
-  { "type": "arrow", "from": "gs", "to": "pg", "label": "topic / resolution" },
-  { "type": "arrow", "from": "pg", "to": "ks", "label": "prompt" },
-  { "type": "arrow", "from": "ks", "to": "vae" },
-  { "type": "arrow", "from": "vae", "to": "sa", "label": "image" }
+  { "type": "rectangle", "id": "gs", "text": "Gap Scanner", "backgroundColor": "#a5d8ff" },
+  { "type": "rectangle", "id": "pg", "text": "Prompt Generator", "backgroundColor": "#a5d8ff" },
+  { "type": "rectangle", "id": "ks", "text": "KSampler", "backgroundColor": "#e9ecef" },
+  { "type": "rectangle", "id": "vae", "text": "VAE Decode", "backgroundColor": "#e9ecef" },
+  { "type": "rectangle", "id": "sa", "text": "Save As", "backgroundColor": "#a5d8ff" },
+  { "type": "arrow", "startElementId": "gs", "endElementId": "pg", "text": "topic / resolution" },
+  { "type": "arrow", "startElementId": "pg", "endElementId": "ks", "text": "prompt" },
+  { "type": "arrow", "startElementId": "ks", "endElementId": "vae" },
+  { "type": "arrow", "startElementId": "vae", "endElementId": "sa", "text": "image" }
 ]

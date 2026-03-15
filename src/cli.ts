@@ -1043,7 +1043,8 @@ program
           } else if (el.type === 'text') {
             console.log(`    [text] ${el.id ?? '(auto)'}: "${el.text}"`);
           } else {
-            const label = typeof el.label === 'string' ? el.label : el.label.text;
+            const labelVal = (el as { text?: unknown; label?: unknown }).text ?? (el as { label?: unknown }).label;
+            const label = typeof labelVal === 'string' ? labelVal : (labelVal as { text?: string })?.text ?? '(no label)';
             console.log(`    [${el.type}] ${el.id}: "${label}"`);
           }
         }

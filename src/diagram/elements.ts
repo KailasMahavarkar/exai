@@ -75,14 +75,19 @@ export function parseElements(raw: string): DiagramInputElement[] {
     if (PSEUDO_TYPES.has(el.type)) continue;
 
     if (el.type === 'arrow') {
-      // Support startElementId/endElementId as aliases
-      if (!el.from && el.startElementId) el.from = el.startElementId;
-      if (!el.to && el.endElementId) el.to = el.endElementId;
+      // Normalize: startElementId/endElementId are primary, from/to are legacy aliases
+      if (!el.startElementId && el.from) el.startElementId = el.from;
+      if (!el.endElementId && el.to) el.endElementId = el.to;
+      // Write back to from/to for internal pipeline compatibility
+      if (el.startElementId) el.from = el.startElementId;
+      if (el.endElementId) el.to = el.endElementId;
+      // Normalize: text is primary, label is legacy alias
+      if (!el.text && el.label) el.text = el.label;
+      if (el.text) el.label = el.text;
       if (!el.from || !el.to) {
-        throw new Error(`Arrow missing "from"/"to": ${JSON.stringify(el)}`);
+        throw new Error(`Arrow missing "startElementId"/"endElementId": ${JSON.stringify(el)}`);
       }
     } else if (el.type === 'text') {
-      // Standalone text element — only requires text content
       if (!el.text) throw new Error(`Text element missing "text": ${JSON.stringify(el)}`);
     } else if (el.type === 'zone') {
       if (!el.id) throw new Error(`Zone missing "id": ${JSON.stringify(el)}`);
@@ -91,11 +96,10 @@ export function parseElements(raw: string): DiagramInputElement[] {
         throw new Error(`Zone missing "children": ${JSON.stringify(el)}`);
     } else {
       if (!el.id) throw new Error(`Shape missing "id": ${JSON.stringify(el)}`);
-      // Support 'text' as alias for 'label'
-      if (!el.label && el.text) {
-        el.label = el.text;
-      }
-      if (!el.label) throw new Error(`Shape missing "label": ${JSON.stringify(el)}`);
+      // Normalize: text is primary, label is legacy alias
+      if (!el.label && el.text) el.label = el.text;
+      if (!el.text && el.label) el.text = el.label;
+      if (!el.label && !el.text) throw new Error(`Shape missing "text": ${JSON.stringify(el)}`);
       // Validate rich label
       if (typeof el.label === 'object') {
         if (!el.label.text) {
