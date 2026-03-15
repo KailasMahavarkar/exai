@@ -92,6 +92,23 @@ export interface SimplifiedArrow {
   roughness?: number;
   /** 1=thin | 2=bold | 4=extra bold (default: style-dependent) */
   strokeWidth?: number;
+  /** Alias for from (Excalidraw native format) */
+  startElementId?: string;
+  /** Alias for to (Excalidraw native format) */
+  endElementId?: string;
+}
+
+export interface SimplifiedText {
+  type: 'text';
+  id?: string;
+  text: string;
+  x?: number;
+  y?: number;
+  fontSize?: number;
+  fontFamily?: number;
+  strokeColor?: string;
+  /** For title positioning: 'above' places it above the diagram */
+  position?: 'above' | 'below';
 }
 
 export interface SimplifiedZone {
@@ -106,7 +123,7 @@ export interface SimplifiedZone {
   opacity?: number;
 }
 
-export type SimplifiedElement = SimplifiedShape | SimplifiedArrow | SimplifiedZone;
+export type SimplifiedElement = SimplifiedShape | SimplifiedArrow | SimplifiedText | SimplifiedZone;
 
 // ── Pseudo-elements ──
 

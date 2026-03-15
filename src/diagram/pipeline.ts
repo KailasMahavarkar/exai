@@ -127,6 +127,7 @@ export async function runDiagramPipeline(
     excalidraw: shapes,
     arrows: rawArrows,
     zones,
+    standaloneTexts,
   } = time('Expand', () => expandLabels(mergedElements, theme));
 
   // Step 5: Apply defaults
@@ -141,7 +142,7 @@ export async function runDiagramPipeline(
   // Step 7: Layout
   onProgress?.('Computing layout...');
   const positioned = time('Layout', () =>
-    layoutElements(styled, arrowElements, rawArrows, config.direction, labelMap, zones)
+    layoutElements(styled, arrowElements, rawArrows, config.direction, labelMap, zones, standaloneTexts)
   );
 
   // Step 8: Build file

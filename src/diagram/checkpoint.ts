@@ -136,15 +136,21 @@ export function mergeElements(
 ): SimplifiedElement[] {
   const result = new Map<string, SimplifiedElement>();
 
-  // Index base elements by ID (arrows use from-to as key)
+  // Index base elements by ID (arrows use from-to as key, text uses id or auto-key)
   for (const el of base) {
-    const key = el.type === 'arrow' ? `arrow:${el.from}:${el.to}` : el.id;
+    const key =
+      el.type === 'arrow'
+        ? `arrow:${el.from}:${el.to}`
+        : (el as { id?: string }).id ?? `auto:${result.size}`;
     result.set(key, el);
   }
 
   // Additions override by key
   for (const el of additions) {
-    const key = el.type === 'arrow' ? `arrow:${el.from}:${el.to}` : el.id;
+    const key =
+      el.type === 'arrow'
+        ? `arrow:${el.from}:${el.to}`
+        : (el as { id?: string }).id ?? `auto:${result.size}`;
     result.set(key, el);
   }
 

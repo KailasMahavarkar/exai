@@ -9,6 +9,7 @@
 import type {
   ExcalidrawElement,
   SimplifiedArrow,
+  SimplifiedText,
   SimplifiedZone,
   DiagramDirection,
   ViewportOverrides,
@@ -198,7 +199,8 @@ export function layoutElements(
   rawArrows: SimplifiedArrow[],
   direction: DiagramDirection,
   labelMap: Map<string, string>,
-  zones?: SimplifiedZone[]
+  zones?: SimplifiedZone[],
+  standaloneTexts?: SimplifiedText[]
 ): ExcalidrawElement[] {
   // Build maps
   const shapeMap = new Map<string, ExcalidrawElement>();
@@ -277,6 +279,45 @@ export function layoutElements(
       if (zoneLabelEl) {
         zoneLabelEl.x = minX + 10;
         zoneLabelEl.y = minY + 10;
+      }
+    }
+  }
+
+  // Position standalone text elements
+  if (standaloneTexts && standaloneTexts.length > 0) {
+    // Compute bounding box of all positioned shapes (excluding zones and text)
+    let minShapeX = Infinity,
+      minShapeY = Infinity,
+      maxShapeX = -Infinity,
+      maxShapeY = -Infinity;
+
+    for (const node of layout) {
+      const shape = shapeMap.get(node.id);
+      if (!shape) continue;
+      minShapeX = Math.min(minShapeX, shape.x);
+      minShapeY = Math.min(minShapeY, shape.y);
+      maxShapeX = Math.max(maxShapeX, shape.x + shape.width);
+      maxShapeY = Math.max(maxShapeY, shape.y + shape.height);
+    }
+
+    const diagramCenterX = (minShapeX + maxShapeX) / 2;
+
+    for (const st of standaloneTexts) {
+      const textEl = shapes.find((el) => el.id === st.id);
+      if (!textEl) continue;
+
+      if (st.position === 'above') {
+        textEl.x = diagramCenterX - (textEl.width ?? 0) / 2;
+        textEl.y = minShapeY - 50;
+      } else if (st.position === 'below') {
+        textEl.x = diagramCenterX - (textEl.width ?? 0) / 2;
+        textEl.y = maxShapeY + 30;
+      } else if (st.x != null || st.y != null) {
+        // Use provided coordinates (already set during expandLabels)
+      } else {
+        // Default: place at top-left of diagram
+        textEl.x = minShapeX;
+        textEl.y = minShapeY - 50;
       }
     }
   }

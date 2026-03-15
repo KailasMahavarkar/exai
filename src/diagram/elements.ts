@@ -12,6 +12,7 @@ import type {
   SimplifiedElement,
   SimplifiedShape,
   SimplifiedArrow,
+  SimplifiedText,
   SimplifiedZone,
   ExcalidrawElement,
   DiagramStyle,
@@ -74,9 +75,15 @@ export function parseElements(raw: string): DiagramInputElement[] {
     if (PSEUDO_TYPES.has(el.type)) continue;
 
     if (el.type === 'arrow') {
+      // Support startElementId/endElementId as aliases
+      if (!el.from && el.startElementId) el.from = el.startElementId;
+      if (!el.to && el.endElementId) el.to = el.endElementId;
       if (!el.from || !el.to) {
-        throw new Error(`Arrow missing "from" or "to": ${JSON.stringify(el)}`);
+        throw new Error(`Arrow missing "from"/"to": ${JSON.stringify(el)}`);
       }
+    } else if (el.type === 'text') {
+      // Standalone text element — only requires text content
+      if (!el.text) throw new Error(`Text element missing "text": ${JSON.stringify(el)}`);
     } else if (el.type === 'zone') {
       if (!el.id) throw new Error(`Zone missing "id": ${JSON.stringify(el)}`);
       if (!el.label) throw new Error(`Zone missing "label": ${JSON.stringify(el)}`);
@@ -84,6 +91,10 @@ export function parseElements(raw: string): DiagramInputElement[] {
         throw new Error(`Zone missing "children": ${JSON.stringify(el)}`);
     } else {
       if (!el.id) throw new Error(`Shape missing "id": ${JSON.stringify(el)}`);
+      // Support 'text' as alias for 'label'
+      if (!el.label && el.text) {
+        el.label = el.text;
+      }
       if (!el.label) throw new Error(`Shape missing "label": ${JSON.stringify(el)}`);
       // Validate rich label
       if (typeof el.label === 'object') {
@@ -148,7 +159,8 @@ export function extractPseudoElements(input: DiagramInputElement[]): ExtractedPs
     deletions.length > 0
       ? elements.filter((el) => {
           if (el.type === 'arrow') return true; // arrows don't have stable IDs to delete
-          return !deletions.includes(el.id);
+          const id = (el as { id?: string }).id;
+          return !id || !deletions.includes(id);
         })
       : elements;
 
@@ -241,15 +253,56 @@ export function expandLabels(
   excalidraw: ExcalidrawElement[];
   arrows: SimplifiedArrow[];
   zones: SimplifiedZone[];
+  standaloneTexts: SimplifiedText[];
 } {
   const colors = getThemeColors(theme);
   const result: ExcalidrawElement[] = [];
   const arrows: SimplifiedArrow[] = [];
   const zones: SimplifiedZone[] = [];
+  const standaloneTexts: SimplifiedText[] = [];
 
   for (const el of elements) {
     if (el.type === 'arrow') {
       arrows.push(el);
+      continue;
+    }
+
+    if (el.type === 'text') {
+      const textEl = el as SimplifiedText;
+      const textId = textEl.id ?? `text-${nanoid(6)}`;
+      const fontSize = textEl.fontSize ?? DEFAULT_FONT_SIZE;
+      const textSize = estimateTextSize(textEl.text, fontSize);
+
+      standaloneTexts.push({ ...textEl, id: textId });
+
+      result.push(
+        baseElement(
+          {
+            id: textId,
+            type: 'text',
+            x: textEl.x ?? 0,
+            y: textEl.y ?? 0,
+            width: textSize.width,
+            height: textSize.height,
+            strokeColor: textEl.strokeColor ?? colors.defaultTextColor,
+            backgroundColor: 'transparent',
+            strokeWidth: 1,
+            roundness: null,
+            boundElements: null,
+            text: textEl.text,
+            fontSize,
+            fontFamily: textEl.fontFamily ?? 1,
+            textAlign: 'center',
+            verticalAlign: 'middle',
+            containerId: null,
+            originalText: textEl.text,
+            lineHeight: LINE_HEIGHT,
+            baseline: Math.round(fontSize * LINE_HEIGHT),
+          },
+          theme
+        )
+      );
+
       continue;
     }
 
@@ -266,7 +319,7 @@ export function expandLabels(
             strokeStyle: 'dashed',
             opacity: zone.opacity ?? 30,
             roughness: 0,
-            backgroundColor: zone.backgroundColor ?? 'transparent',
+            backgroundColor: zone.backgroundColor ?? '#e9ecef',
             strokeColor: zone.strokeColor ?? colors.defaultStrokeColor,
             boundElements: [{ type: 'text', id: `${zone.id}-text` }],
           },
@@ -363,7 +416,7 @@ export function expandLabels(
     );
   }
 
-  return { excalidraw: result, arrows, zones };
+  return { excalidraw: result, arrows, zones, standaloneTexts };
 }
 
 // ── Apply Defaults ──

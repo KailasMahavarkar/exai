@@ -1040,6 +1040,8 @@ program
           if (el.type === 'arrow') {
             const label = el.label ? ` "${el.label}"` : '';
             console.log(`    [arrow] ${el.from} -> ${el.to}${label}`);
+          } else if (el.type === 'text') {
+            console.log(`    [text] ${el.id ?? '(auto)'}: "${el.text}"`);
           } else {
             const label = typeof el.label === 'string' ? el.label : el.label.text;
             console.log(`    [${el.type}] ${el.id}: "${label}"`);

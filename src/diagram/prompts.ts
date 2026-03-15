@@ -58,6 +58,26 @@ Labels can be a string or an object for fine control:
 - Zones render as dashed background rectangles behind their children
 - Use opacity 25-40 for subtle grouping
 
+## Standalone text elements
+
+- { "type": "text", "text": "System Overview", "position": "above" } — title above the diagram
+- { "type": "text", "text": "Footnote", "position": "below" } — text below the diagram
+- Optional properties: id, x, y, fontSize, fontFamily, strokeColor
+
+## Sizing rules
+
+- Box width: 200-240px, height: 100-160px.
+- Gap between boxes: 150px for labeled arrows, 100px for unlabeled.
+- Zone padding: 50-60px around contained children.
+- Arrow labels need 120px clear space between boxes. If label text is longer than half the gap, increase the gap.
+
+## Layout guidance
+
+- Vertical flow (TB) is default. Use LR for pipeline/timeline diagrams.
+- Space columns 400px apart for labeled arrows.
+- Use zones to group related components (e.g., "Frontend Layer", "Backend Layer").
+- For parameter threading/call chains, use 3-column layout: layer labels (left, gray), flow boxes (center, colored), annotations (right, orange).
+
 ## Pseudo-elements (optional)
 
 - { "type": "cameraUpdate", "zoom": 0.8 } — override viewport zoom (0.1-2.0)
@@ -69,6 +89,8 @@ Input: "API gateway routes to auth service and user service, both connect to dat
 
 Output:
 [
+  { "type": "text", "text": "Service Architecture", "position": "above", "fontSize": 24 },
+  { "type": "zone", "id": "zone-backend", "label": "Backend Services", "children": ["auth", "users"], "backgroundColor": "#e9ecef" },
   { "type": "ellipse", "id": "client", "label": "Client", "backgroundColor": "#e7f5ff" },
   { "type": "rectangle", "id": "gateway", "label": "API Gateway", "backgroundColor": "#a5d8ff" },
   { "type": "rectangle", "id": "auth", "label": "Auth Service", "backgroundColor": "#d0bfff" },
