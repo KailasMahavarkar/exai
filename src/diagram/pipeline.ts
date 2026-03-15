@@ -1,47 +1,41 @@
 /**
- * Diagram generation pipeline.
+ * D2 diagram generation pipeline.
  *
  * Steps:
- *   1. Get input (LLM call or file/stdin)
- *   2. Parse all elements (including pseudo-elements)
- *   3. Extract pseudo-elements (camera, delete, checkpoint)
- *   4. Expand labels → shape + bound text
- *   5. Apply style defaults
- *   6. Resolve arrow bindings
- *   7. Auto-layout positions
- *   8. Build .excalidraw file
- *   9. Write output
+ *   1. Get input (LLM or JSON file)
+ *   2. Parse JSON elements
+ *   3. Compile to D2 syntax
+ *   4. Render via d2 binary
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, resolve } from 'path';
 import { callLLM } from '../ai/openrouter.js';
-import {
-  parseElements,
-  extractPseudoElements,
-  expandLabels,
-  applyDefaults,
-  resolveBindings,
-} from './elements.js';
-import { layoutElements, computeViewport } from './layout.js';
-import { buildExcalidrawFile } from './build-file.js';
+import { compileToD2 } from './compiler.js';
+import { renderD2 } from './render.js';
+import { resolveTheme } from './themes.js';
 import { DIAGRAM_SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
 import { loadCheckpoint, saveCheckpoint, mergeElements } from './checkpoint.js';
-import type {
-  DiagramPipelineConfig,
-  DiagramPipelineResult,
-  DiagramTimingEntry,
-  DiagramTheme,
-  SimplifiedElement,
-} from './types.js';
+import type { DiagramPipelineConfig, DiagramPipelineResult, DiagramTimingEntry, SimplifiedElement } from './types.js';
+
+function parseElements(raw: string): SimplifiedElement[] {
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/```(?:json)?\n?/g, '').replace(/```\n?/g, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start === -1 || end === -1) throw new Error('No JSON array found in input');
+  cleaned = cleaned.slice(start, end + 1);
+  const parsed = JSON.parse(cleaned) as SimplifiedElement[];
+  if (!Array.isArray(parsed)) throw new Error('Input must be a JSON array');
+  return parsed;
+}
 
 export async function runDiagramPipeline(
   config: DiagramPipelineConfig,
-  onProgress?: (step: string) => void
+  onProgress?: (step: string) => void,
 ): Promise<DiagramPipelineResult> {
   const timing: DiagramTimingEntry[] = [];
   const totalStart = Date.now();
-  const theme: DiagramTheme = config.theme ?? 'light';
 
   function time<T>(label: string, fn: () => T): T {
     const start = Date.now();
@@ -57,32 +51,20 @@ export async function runDiagramPipeline(
     return result;
   }
 
-  // Step 1: Get raw input
+  // Step 1: Get input
   let rawInput: string;
-
   if (config.stdin) {
     onProgress?.('Reading from stdin...');
-    rawInput = time('Read stdin', () => {
-      try {
-        return readFileSync(0, 'utf-8');
-      } catch {
-        return '';
-      }
-    });
+    rawInput = time('Read stdin', () => { try { return readFileSync(0, 'utf-8'); } catch { return ''; } });
   } else if (config.jsonInput) {
-    onProgress?.('Reading JSON input...');
+    onProgress?.('Reading input...');
     rawInput = time('Read file', () => {
-      // Check if it's a file path or raw JSON
-      if (config.jsonInput!.trim().startsWith('[') || config.jsonInput!.trim().startsWith('{')) {
-        return config.jsonInput!;
-      }
+      if (config.jsonInput!.trim().startsWith('[') || config.jsonInput!.trim().startsWith('{')) return config.jsonInput!;
       return readFileSync(config.jsonInput!, 'utf-8');
     });
   } else {
-    // LLM mode
-    onProgress?.('Generating diagram via LLM...');
-    const userPrompt = buildUserPrompt(config.prompt, config.direction, theme);
-
+    onProgress?.('Generating via LLM...');
+    const userPrompt = buildUserPrompt(config.prompt, config.direction);
     rawInput = await timeAsync('LLM call', () =>
       callLLM(userPrompt, DIAGRAM_SYSTEM_PROMPT, {
         model: config.model,
@@ -98,79 +80,63 @@ export async function runDiagramPipeline(
     );
   }
 
-  // Step 2: Parse all elements
+  // Step 2: Parse
   onProgress?.('Parsing elements...');
-  const allInput = time('Parse', () => parseElements(rawInput));
+  let elements = time('Parse', () => parseElements(rawInput));
 
-  // Step 3: Extract pseudo-elements
-  const {
-    elements: simplified,
-    viewportOverrides,
-    restoreCheckpoint: restoreName,
-  } = time('Pseudos', () => extractPseudoElements(allInput));
+  // Checkpoint restore
+  if (config.fromCheckpoint) {
+    onProgress?.(`Loading checkpoint "${config.fromCheckpoint}"...`);
+    const checkpoint = time('Checkpoint', () => loadCheckpoint(config.fromCheckpoint!));
+    elements = mergeElements(checkpoint.elements, elements);
+  }
 
-  // Step 3b: Load checkpoint if requested (--from-checkpoint or restoreCheckpoint pseudo)
-  let mergedElements: SimplifiedElement[] = simplified;
-  const checkpointName = restoreName || config.fromCheckpoint;
-  if (checkpointName) {
-    onProgress?.(`Loading checkpoint "${checkpointName}"...`);
-    const checkpoint = time('Checkpoint', () => loadCheckpoint(checkpointName));
-    mergedElements = mergeElements(checkpoint.elements, simplified);
-    onProgress?.(
-      `Merged ${checkpoint.elements.length} base + ${simplified.length} new → ${mergedElements.length} elements`
+  // Step 3: Compile to D2
+  onProgress?.('Compiling D2...');
+  const d2Source = time('Compile', () => compileToD2(elements, config.direction));
+
+  if (config.verbose) {
+    console.log('  --- D2 source ---');
+    console.log(d2Source);
+    console.log('  --- end ---');
+  }
+
+  // Determine output format
+  let outputPath = resolve(config.output);
+  if (outputPath.endsWith('.excalidraw')) {
+    outputPath = outputPath.replace('.excalidraw', '.svg');
+  }
+  if (!outputPath.match(/\.(svg|png|pdf|d2)$/)) {
+    outputPath += '.svg';
+  }
+
+  mkdirSync(dirname(outputPath), { recursive: true });
+
+  // If output is .d2, just write the source
+  if (outputPath.endsWith('.d2')) {
+    writeFileSync(outputPath, d2Source, 'utf-8');
+  } else {
+    // Step 4: Render
+    onProgress?.('Rendering...');
+    time('Render', () =>
+      renderD2({
+        d2Source,
+        outputPath,
+        theme: resolveTheme(config.theme),
+        layout: config.layout,
+        sketch: config.sketch,
+        pad: config.pad,
+        verbose: config.verbose,
+      })
     );
   }
 
-  // Step 4: Expand labels
-  onProgress?.('Expanding labels...');
-  const {
-    excalidraw: shapes,
-    arrows: rawArrows,
-    zones,
-    standaloneTexts,
-  } = time('Expand', () => expandLabels(mergedElements, theme));
-
-  // Step 5: Apply defaults
-  const styled = time('Style', () => applyDefaults(shapes, config.style));
-
-  // Step 6: Resolve bindings
-  onProgress?.('Resolving connections...');
-  const { arrowElements, labelMap } = time('Bindings', () =>
-    resolveBindings(styled, rawArrows, config.direction, theme)
-  );
-
-  // Step 7: Layout
-  onProgress?.('Computing layout...');
-  const positioned = time('Layout', () =>
-    layoutElements(styled, arrowElements, rawArrows, config.direction, labelMap, zones, standaloneTexts)
-  );
-
-  // Step 8: Build file
-  const viewport = computeViewport(positioned, viewportOverrides);
-  const file = buildExcalidrawFile(positioned, viewport, theme);
-
-  // Step 9: Write
-  onProgress?.('Writing output...');
-  const outputJson = JSON.stringify(file, null, 2);
-  mkdirSync(dirname(config.output), { recursive: true });
-  writeFileSync(config.output, outputJson, 'utf-8');
-
-  // Step 10: Save checkpoint if requested
+  // Save checkpoint
   if (config.checkpoint) {
     onProgress?.(`Saving checkpoint "${config.checkpoint}"...`);
-    saveCheckpoint(config.checkpoint, mergedElements, {
-      direction: config.direction,
-      style: config.style,
-      theme,
-    });
+    saveCheckpoint(config.checkpoint, elements, { direction: config.direction });
   }
 
   const totalMs = Date.now() - totalStart;
-
-  return {
-    outputPath: config.output,
-    elementCount: positioned.length,
-    timing,
-    totalMs,
-  };
+  return { outputPath, elementCount: elements.length, timing, totalMs };
 }

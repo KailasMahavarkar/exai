@@ -4,8 +4,8 @@
   { "type": "rectangle", "id": "ks", "text": "KSampler", "backgroundColor": "#e9ecef" },
   { "type": "rectangle", "id": "vae", "text": "VAE Decode", "backgroundColor": "#e9ecef" },
   { "type": "rectangle", "id": "sa", "text": "Save As", "backgroundColor": "#a5d8ff" },
-  { "type": "arrow", "startElementId": "gs", "endElementId": "pg", "text": "topic / resolution" },
-  { "type": "arrow", "startElementId": "pg", "endElementId": "ks", "text": "prompt" },
-  { "type": "arrow", "startElementId": "ks", "endElementId": "vae" },
-  { "type": "arrow", "startElementId": "vae", "endElementId": "sa", "text": "image" }
+  { "type": "arrow", "from": "gs", "to": "pg", "text": "topic / resolution" },
+  { "type": "arrow", "from": "pg", "to": "ks", "text": "prompt" },
+  { "type": "arrow", "from": "ks", "to": "vae" },
+  { "type": "arrow", "from": "vae", "to": "sa", "text": "image" }
 ]

@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { SimplifiedElement, DiagramDirection, DiagramStyle, DiagramTheme } from './types.js';
+import type { SimplifiedElement, DiagramDirection } from './types.js';
 
 // ── Types ──
 
@@ -18,8 +18,9 @@ export interface CheckpointData {
   timestamp: number;
   elements: SimplifiedElement[];
   direction?: DiagramDirection;
-  style?: DiagramStyle;
-  theme?: DiagramTheme;
+  theme?: string | number;
+  layout?: string;
+  sketch?: boolean;
 }
 
 export interface CheckpointSummary {
@@ -27,7 +28,7 @@ export interface CheckpointSummary {
   timestamp: number;
   elementCount: number;
   direction?: DiagramDirection;
-  theme?: DiagramTheme;
+  theme?: string | number;
 }
 
 // ── Store ──
@@ -49,7 +50,7 @@ function filePath(name: string): string {
 export function saveCheckpoint(
   name: string,
   elements: SimplifiedElement[],
-  options?: { direction?: DiagramDirection; style?: DiagramStyle; theme?: DiagramTheme }
+  options?: { direction?: DiagramDirection; theme?: string | number; layout?: string; sketch?: boolean }
 ): void {
   ensureDir();
   const data: CheckpointData = {
@@ -58,8 +59,9 @@ export function saveCheckpoint(
     timestamp: Date.now(),
     elements,
     direction: options?.direction,
-    style: options?.style,
     theme: options?.theme,
+    layout: options?.layout,
+    sketch: options?.sketch,
   };
   writeFileSync(filePath(name), JSON.stringify(data, null, 2), 'utf-8');
 }
@@ -140,7 +142,7 @@ export function mergeElements(
   for (const el of base) {
     const key =
       el.type === 'arrow'
-        ? `arrow:${el.startElementId}:${el.endElementId}`
+        ? `arrow:${el.from}:${el.to}`
         : (el as { id?: string }).id ?? `auto:${result.size}`;
     result.set(key, el);
   }
@@ -149,7 +151,7 @@ export function mergeElements(
   for (const el of additions) {
     const key =
       el.type === 'arrow'
-        ? `arrow:${el.startElementId}:${el.endElementId}`
+        ? `arrow:${el.from}:${el.to}`
         : (el as { id?: string }).id ?? `auto:${result.size}`;
     result.set(key, el);
   }

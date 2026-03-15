@@ -3,10 +3,11 @@
  *
  * One config file to control the entire pipeline:
  * - AI/LLM settings (model, filterModel, apiKey, temperature)
- * - Output settings (format, output, direction, spacing)
+ * - Output settings (format, output, direction)
  * - Context gathering (context paths, exclude, allowTestFiles, maxFileSize, maxDepth, maxTreeItems)
  * - Compression (compress, compressMode, compressOptions)
  * - Cache (cache, cacheTtlDays, cacheMaxEntries)
+ * - Diagram (direction, theme, layout, sketch)
  * - Misc (verbose)
  *
  * All fields optional. Priority: CLI flags > config file > env vars > hardcoded defaults.
@@ -20,22 +21,12 @@ import { resolve, dirname, isAbsolute } from 'path';
 export interface DiagramConfig {
   /** Layout direction: TB (top-to-bottom) or LR (left-to-right) */
   direction?: 'TB' | 'LR';
-  /** Visual style: hand-drawn or clean */
-  style?: 'hand-drawn' | 'clean';
-  /** Color theme: light or dark */
-  theme?: 'light' | 'dark';
-}
-
-export interface ExcalidrawStyleConfig {
-  strokeWidth?: 1 | 2 | 4;
-  fillStyle?: 'hachure' | 'cross-hatch' | 'solid' | 'dots' | 'dashed' | 'zigzag' | 'none';
-  strokeStyle?: 'solid' | 'dashed' | 'dotted';
-  roughness?: 0 | 1 | 2;
-  edges?: 'round' | 'sharp';
-  arrowhead?: 'arrow' | 'bar' | 'dot' | 'triangle' | 'none';
-  fontFamily?: 'hand' | 'normal' | 'code' | 'excalifont';
-  fontSize?: number;
-  textAlign?: 'left' | 'center' | 'right';
+  /** D2 theme name or number */
+  theme?: string | number;
+  /** Layout engine: dagre or elk */
+  layout?: 'dagre' | 'elk';
+  /** Enable sketch/hand-drawn mode */
+  sketch?: boolean;
 }
 
 export interface ConfigCompressOptions {
@@ -63,7 +54,6 @@ export interface CliConfig {
   format?: string;
   output?: string;
   direction?: string;
-  spacing?: number;
 
   // Context gathering
   context?: string[];
@@ -89,9 +79,6 @@ export interface CliConfig {
   /** LLM request timeout in seconds (default: 120) */
   timeoutSecs?: number;
 
-  // Excalidraw visual style
-  excalidraw?: ExcalidrawStyleConfig;
-
   // Diagram pipeline settings
   diagram?: DiagramConfig;
 }
@@ -109,7 +96,6 @@ const KNOWN_KEYS = new Set<string>([
   'format',
   'output',
   'direction',
-  'spacing',
   // Context
   'context',
   'exclude',
@@ -129,8 +115,6 @@ const KNOWN_KEYS = new Set<string>([
   // Misc
   'verbose',
   'timeoutSecs',
-  // Excalidraw visual style
-  'excalidraw',
   // Diagram pipeline settings
   'diagram',
 ]);
@@ -167,88 +151,6 @@ function assertStringArray(obj: Record<string, unknown>, key: string): string[] 
     throw new Error(`Config "${key}" must be an array of strings`);
   }
   return val as string[];
-}
-
-const EXCALIDRAW_STYLE_KEYS = new Set<string>([
-  'strokeWidth',
-  'fillStyle',
-  'strokeStyle',
-  'roughness',
-  'edges',
-  'arrowhead',
-  'fontFamily',
-  'fontSize',
-  'textAlign',
-]);
-
-function parseExcalidrawStyleConfig(obj: unknown): ExcalidrawStyleConfig {
-  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
-    throw new Error('Config "excalidraw" must be an object');
-  }
-
-  const raw = obj as Record<string, unknown>;
-  const unknowns = Object.keys(raw).filter((k) => !EXCALIDRAW_STYLE_KEYS.has(k));
-  if (unknowns.length > 0) {
-    console.warn(`Warning: Unknown excalidraw style keys ignored: ${unknowns.join(', ')}`);
-  }
-
-  const result: ExcalidrawStyleConfig = {};
-
-  if (raw.strokeWidth !== undefined) {
-    const v = assertNumber(raw, 'strokeWidth');
-    if (v === 1 || v === 2 || v === 4) result.strokeWidth = v;
-    else console.warn(`Warning: excalidraw.strokeWidth must be 1, 2, or 4. Got: ${v}`);
-  }
-  if (raw.fillStyle !== undefined) {
-    const v = assertString(raw, 'fillStyle');
-    const valid = ['hachure', 'cross-hatch', 'solid', 'dots', 'dashed', 'zigzag', 'none'];
-    if (valid.includes(v)) result.fillStyle = v as ExcalidrawStyleConfig['fillStyle'];
-    else
-      console.warn(
-        `Warning: excalidraw.fillStyle "${v}" is not valid. Options: ${valid.join(', ')}`
-      );
-  }
-  if (raw.strokeStyle !== undefined) {
-    const v = assertString(raw, 'strokeStyle');
-    if (v === 'solid' || v === 'dashed' || v === 'dotted') result.strokeStyle = v;
-    else console.warn(`Warning: excalidraw.strokeStyle "${v}" is not valid`);
-  }
-  if (raw.roughness !== undefined) {
-    const v = assertNumber(raw, 'roughness');
-    if (v === 0 || v === 1 || v === 2) result.roughness = v;
-    else console.warn(`Warning: excalidraw.roughness must be 0, 1, or 2. Got: ${v}`);
-  }
-  if (raw.edges !== undefined) {
-    const v = assertString(raw, 'edges');
-    if (v === 'round' || v === 'sharp') result.edges = v;
-    else console.warn(`Warning: excalidraw.edges "${v}" is not valid. Use 'round' or 'sharp'`);
-  }
-  if (raw.arrowhead !== undefined) {
-    const v = assertString(raw, 'arrowhead');
-    const valid = ['arrow', 'bar', 'dot', 'triangle', 'none'];
-    if (valid.includes(v)) result.arrowhead = v as ExcalidrawStyleConfig['arrowhead'];
-    else
-      console.warn(
-        `Warning: excalidraw.arrowhead "${v}" is not valid. Options: ${valid.join(', ')}`
-      );
-  }
-  if (raw.fontFamily !== undefined) {
-    const v = assertString(raw, 'fontFamily');
-    const valid = ['hand', 'normal', 'code', 'excalifont'];
-    if (valid.includes(v)) result.fontFamily = v as ExcalidrawStyleConfig['fontFamily'];
-    else
-      console.warn(
-        `Warning: excalidraw.fontFamily "${v}" is not valid. Options: ${valid.join(', ')}`
-      );
-  }
-  if (raw.fontSize !== undefined) result.fontSize = assertNumber(raw, 'fontSize');
-  if (raw.textAlign !== undefined) {
-    const v = assertString(raw, 'textAlign');
-    if (v === 'left' || v === 'center' || v === 'right') result.textAlign = v;
-    else console.warn(`Warning: excalidraw.textAlign "${v}" is not valid`);
-  }
-
-  return result;
 }
 
 function parseCompressOptions(obj: unknown): ConfigCompressOptions {
@@ -337,7 +239,6 @@ export function loadConfig(configPath: string): CliConfig {
   if (obj.format !== undefined) config.format = assertString(obj, 'format');
   if (obj.output !== undefined) config.output = assertString(obj, 'output');
   if (obj.direction !== undefined) config.direction = assertString(obj, 'direction');
-  if (obj.spacing !== undefined) config.spacing = assertNumber(obj, 'spacing');
 
   // Context gathering
   if (obj.context !== undefined) {
@@ -368,9 +269,6 @@ export function loadConfig(configPath: string): CliConfig {
   if (obj.verbose !== undefined) config.verbose = assertBoolean(obj, 'verbose');
   if (obj.timeoutSecs !== undefined) config.timeoutSecs = assertNumber(obj, 'timeoutSecs');
 
-  // Excalidraw visual style
-  if (obj.excalidraw !== undefined) config.excalidraw = parseExcalidrawStyleConfig(obj.excalidraw);
-
   // Diagram pipeline settings
   if (obj.diagram !== undefined) {
     if (typeof obj.diagram !== 'object' || obj.diagram === null || Array.isArray(obj.diagram)) {
@@ -383,15 +281,22 @@ export function loadConfig(configPath: string): CliConfig {
       if (v === 'TB' || v === 'LR') diagramConfig.direction = v;
       else console.warn(`Warning: diagram.direction "${v}" is not valid. Use 'TB' or 'LR'`);
     }
-    if (d.style !== undefined) {
-      const v = assertString(d, 'style');
-      if (v === 'hand-drawn' || v === 'clean') diagramConfig.style = v;
-      else console.warn(`Warning: diagram.style "${v}" is not valid. Use 'hand-drawn' or 'clean'`);
-    }
     if (d.theme !== undefined) {
-      const v = assertString(d, 'theme');
-      if (v === 'light' || v === 'dark') diagramConfig.theme = v;
-      else console.warn(`Warning: diagram.theme "${v}" is not valid. Use 'light' or 'dark'`);
+      if (typeof d.theme === 'number') {
+        diagramConfig.theme = d.theme;
+      } else if (typeof d.theme === 'string') {
+        diagramConfig.theme = d.theme;
+      } else {
+        console.warn(`Warning: diagram.theme must be a string or number`);
+      }
+    }
+    if (d.layout !== undefined) {
+      const v = assertString(d, 'layout');
+      if (v === 'dagre' || v === 'elk') diagramConfig.layout = v;
+      else console.warn(`Warning: diagram.layout "${v}" is not valid. Use 'dagre' or 'elk'`);
+    }
+    if (d.sketch !== undefined) {
+      diagramConfig.sketch = assertBoolean(d, 'sketch');
     }
     config.diagram = diagramConfig;
   }
@@ -412,10 +317,8 @@ export const CONFIG_TEMPLATE: CliConfig = {
   temperature: 0,
 
   // Output
-  format: 'dsl',
-  output: 'flowchart.excalidraw',
+  output: 'diagram.svg',
   direction: 'TB',
-  spacing: 50,
 
   // Context gathering
   context: ['.'],
@@ -449,16 +352,11 @@ export const CONFIG_TEMPLATE: CliConfig = {
   verbose: false,
   timeoutSecs: 120,
 
-  // Excalidraw visual style (global defaults applied to every element)
-  excalidraw: {
-    strokeWidth: 2,
-    fillStyle: 'hachure',
-    strokeStyle: 'solid',
-    roughness: 1,
-    edges: 'round',
-    arrowhead: 'arrow',
-    fontFamily: 'hand',
-    fontSize: 20,
-    textAlign: 'center',
+  // Diagram pipeline settings
+  diagram: {
+    direction: 'TB',
+    theme: 'light',
+    layout: 'dagre',
+    sketch: false,
   },
 };

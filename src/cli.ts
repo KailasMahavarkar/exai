@@ -1,50 +1,17 @@
 #!/usr/bin/env node
 
 /**
- * Excalidraw CLI
+ * exai CLI — AI-powered D2 diagram generator
  *
- * Create Excalidraw flowcharts from DSL, JSON, or DOT input.
+ * Generate D2 diagrams from natural language or JSON input.
  */
 
 import { Command } from 'commander';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { resolve, join } from 'path';
+import { resolve } from 'path';
 import { createRequire } from 'module';
-import { tmpdir } from 'os';
-import { parseDSL } from './parser/dsl-parser.js';
-import { parseJSONString } from './parser/json-parser.js';
-import { parseDOT } from './parser/dot-parser.js';
-import { layoutGraph } from './layout/elk-layout.js';
-import { generateExcalidraw, serializeExcalidraw } from './generator/excalidraw-generator.js';
-import { generateFlowchartInput, type OutputFormat } from './ai/openrouter.js';
-import { gatherContext } from './ai/context-gatherer.js';
+import { loadConfig, CONFIG_TEMPLATE, type CliConfig } from './ai/config.js';
 import { cache } from './ai/cache.js';
-import {
-  loadConfig,
-  CONFIG_TEMPLATE,
-  type CliConfig,
-  type ExcalidrawStyleConfig,
-} from './ai/config.js';
-import type { FlowchartGraph, FlowDirection, GlobalDiagramStyle } from './types/dsl.js';
-
-export interface CompressionOptions {
-  removeComments?: boolean;
-  minifyWhitespace?: boolean;
-  extractSignaturesOnly?: boolean;
-  maxFileLines?: number;
-  preserveImports?: boolean;
-  preserveExports?: boolean;
-  preserveTypes?: boolean;
-  preserveFunctionSignatures?: boolean;
-}
-
-export interface CompressionResult {
-  compressed: string;
-  originalSize: number;
-  compressedSize: number;
-  compressionRatio: number;
-  filesProcessed: number;
-}
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -52,48 +19,6 @@ const pkg = require('../package.json') as { version: string };
 const program = new Command();
 const EXAI_API_KEY_ENV = 'EXAI_OPENROUTER_APIKEY';
 const LEGACY_OPENROUTER_API_KEY_ENV = 'OPENROUTER_API_KEY';
-
-/**
- * Get compression options based on mode
- */
-function getCompressionOptions(mode: string): CompressionOptions {
-  switch (mode) {
-    case 'aggressive':
-      return {
-        removeComments: true,
-        minifyWhitespace: true,
-        extractSignaturesOnly: true,
-        maxFileLines: 50,
-        preserveImports: true,
-        preserveExports: true,
-        preserveTypes: true,
-        preserveFunctionSignatures: true,
-      };
-    case 'minimal':
-      return {
-        removeComments: false,
-        minifyWhitespace: true,
-        extractSignaturesOnly: false,
-        maxFileLines: 200,
-        preserveImports: true,
-        preserveExports: true,
-        preserveTypes: true,
-        preserveFunctionSignatures: true,
-      };
-    case 'balanced':
-    default:
-      return {
-        removeComments: true,
-        minifyWhitespace: true,
-        extractSignaturesOnly: false,
-        maxFileLines: 100,
-        preserveImports: true,
-        preserveExports: true,
-        preserveTypes: true,
-        preserveFunctionSignatures: true,
-      };
-  }
-}
 
 function unquoteEnvValue(value: string): string {
   const trimmed = value.trim();
@@ -139,34 +64,6 @@ function readApiKeysFromDotEnv(envPath: string = resolve('.env')): {
   }
 }
 
-const FONT_FAMILY_CONFIG_MAP: Record<string, number> = {
-  hand: 1,
-  normal: 2,
-  code: 3,
-  excalifont: 5,
-};
-
-/**
- * Convert ExcalidrawStyleConfig (from config file) to GlobalDiagramStyle (used by generator)
- */
-function excalidrawConfigToGlobalStyle(cfg: ExcalidrawStyleConfig): GlobalDiagramStyle {
-  const result: GlobalDiagramStyle = {};
-  if (cfg.strokeWidth !== undefined) result.strokeWidth = cfg.strokeWidth;
-  if (cfg.fillStyle !== undefined) result.fillStyle = cfg.fillStyle;
-  if (cfg.strokeStyle !== undefined) result.strokeStyle = cfg.strokeStyle;
-  if (cfg.roughness !== undefined) result.roughness = cfg.roughness;
-  if (cfg.edges !== undefined) result.roundEdges = cfg.edges === 'round';
-  if (cfg.arrowhead !== undefined) {
-    result.endArrowhead = cfg.arrowhead === 'none' ? null : cfg.arrowhead;
-  }
-  if (cfg.fontFamily !== undefined) {
-    result.fontFamily = FONT_FAMILY_CONFIG_MAP[cfg.fontFamily] ?? 5;
-  }
-  if (cfg.fontSize !== undefined) result.fontSize = cfg.fontSize;
-  if (cfg.textAlign !== undefined) result.textAlign = cfg.textAlign;
-  return result;
-}
-
 function resolveApiKey(
   optionsApiKey: string | undefined,
   command: Command,
@@ -202,620 +99,143 @@ function resolveApiKey(
 
 program
   .name('exai')
-  .description('Create Excalidraw flowcharts from DSL, JSON, or DOT')
+  .description('AI-powered D2 diagram generator')
   .version(pkg.version);
 
 /**
- * Create command - main flowchart creation
+ * Diagram command — generate D2 diagrams from AI or JSON
  */
 program
-  .command('create')
-  .description('Create an Excalidraw flowchart')
-  .argument('[input]', 'Input file path (DSL, JSON, or DOT)')
-  .option('-o, --output <file>', 'Output file path', 'flowchart.excalidraw')
-  .option('-f, --format <type>', 'Input format: dsl, json, dot (default: dsl)', 'dsl')
-  .option('--inline <dsl>', 'Inline DSL/DOT string')
-  .option('--stdin', 'Read input from stdin')
-  .option('-d, --direction <dir>', 'Flow direction: TB, BT, LR, RL (default: TB)')
-  .option('-s, --spacing <n>', 'Node spacing in pixels', '50')
-  .option('--config-path <path>', 'Path to config JSON file (reads excalidraw style block only)')
-  .option('--verbose', 'Verbose output')
-  .action(async (inputFile, options, command) => {
-    try {
-      let input: string;
-      let format = options.format;
-      const formatExplicitlySet = command.getOptionValueSource('format') === 'cli';
-
-      // Load config for excalidraw style (auto-detect if not specified)
-      let createGlobalStyle: GlobalDiagramStyle | undefined;
-      {
-        const DEFAULT_CONFIG_NAME = 'exai.config.json';
-        const autoConfigPath = resolve(DEFAULT_CONFIG_NAME);
-        const configPath =
-          options.configPath || (existsSync(autoConfigPath) ? autoConfigPath : undefined);
-        if (configPath) {
-          try {
-            const cfg = loadConfig(configPath);
-            if (cfg.excalidraw) {
-              createGlobalStyle = excalidrawConfigToGlobalStyle(cfg.excalidraw);
-            }
-          } catch (err) {
-            if (options.configPath) {
-              // Only throw if explicitly specified
-              throw err;
-            }
-          }
-        }
-      }
-
-      // Get input from various sources
-      if (options.inline) {
-        input = options.inline;
-      } else if (options.stdin) {
-        input = readFileSync(0, 'utf-8'); // Read from stdin
-      } else if (inputFile) {
-        input = readFileSync(inputFile, 'utf-8');
-
-        // Auto-detect format from file extension (only if --format not explicitly set)
-        if (!formatExplicitlySet) {
-          if (inputFile.endsWith('.json')) {
-            format = 'json';
-          } else if (inputFile.endsWith('.dot') || inputFile.endsWith('.gv')) {
-            format = 'dot';
-          }
-        }
-      } else {
-        console.error('Error: No input provided. Use --inline, --stdin, or provide an input file.');
-        process.exit(1);
-      }
-
-      if (options.verbose) {
-        console.log(`Input format: ${format}`);
-        console.log(`Input length: ${input.length} characters`);
-      }
-
-      // Parse input
-      let graph: FlowchartGraph;
-      if (format === 'json') {
-        graph = parseJSONString(input);
-      } else if (format === 'dot') {
-        graph = parseDOT(input);
-      } else {
-        graph = parseDSL(input);
-      }
-
-      // Apply CLI options
-      if (options.direction) {
-        const dir = options.direction.toUpperCase() as FlowDirection;
-        if (['TB', 'BT', 'LR', 'RL'].includes(dir)) {
-          graph.options.direction = dir;
-        }
-      }
-      if (options.spacing) {
-        const spacing = parseInt(options.spacing, 10);
-        if (!isNaN(spacing)) {
-          graph.options.nodeSpacing = spacing;
-        }
-      }
-
-      if (options.verbose) {
-        console.log(`Parsed ${graph.nodes.length} nodes and ${graph.edges.length} edges`);
-        console.log(`Layout direction: ${graph.options.direction}`);
-      }
-
-      // Layout the graph
-      const layoutedGraph = await layoutGraph(graph);
-
-      if (options.verbose) {
-        console.log(`Layout complete. Canvas size: ${layoutedGraph.width}x${layoutedGraph.height}`);
-      }
-
-      // Generate Excalidraw file
-      const excalidrawFile = generateExcalidraw(layoutedGraph, createGlobalStyle);
-      const output = serializeExcalidraw(excalidrawFile);
-
-      // Write output
-      if (options.output === '-') {
-        process.stdout.write(output);
-      } else {
-        const absolutePath = resolve(options.output);
-        writeFileSync(absolutePath, output, 'utf-8');
-        console.log(`✅ Created: ${absolutePath}`);
-        console.log(`📦 Size: ${(output.length / 1024).toFixed(1)}KB`);
-      }
-    } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  });
-
-/**
- * Parse command - parse and validate input without generating
- */
-program
-  .command('parse')
-  .description('Parse and validate input without generating output')
-  .argument('[input]', 'Input file path')
-  .option('-f, --format <type>', 'Input format: dsl, json, dot (default: dsl)', 'dsl')
-  .option('--inline <dsl>', 'Inline DSL/DOT string')
-  .option('--stdin', 'Read input from stdin')
-  .action((inputFile, options, command) => {
-    try {
-      let input: string;
-      let format = options.format;
-      const formatExplicitlySet = command.getOptionValueSource('format') === 'cli';
-
-      if (options.inline) {
-        input = options.inline;
-      } else if (options.stdin) {
-        input = readFileSync(0, 'utf-8');
-      } else if (inputFile) {
-        input = readFileSync(inputFile, 'utf-8');
-        if (!formatExplicitlySet) {
-          if (inputFile.endsWith('.json')) format = 'json';
-          else if (inputFile.endsWith('.dot') || inputFile.endsWith('.gv')) format = 'dot';
-        }
-      } else {
-        console.error('Error: No input provided. Use --inline, --stdin, or provide an input file.');
-        process.exit(1);
-      }
-
-      // Parse input
-      let graph: FlowchartGraph;
-      if (format === 'json') {
-        graph = parseJSONString(input);
-      } else if (format === 'dot') {
-        graph = parseDOT(input);
-      } else {
-        graph = parseDSL(input);
-      }
-
-      console.log('Parse successful!');
-      console.log(`  Nodes: ${graph.nodes.length}`);
-      console.log(`  Edges: ${graph.edges.length}`);
-      if (graph.groups?.length) console.log(`  Groups: ${graph.groups.length}`);
-      console.log(`  Direction: ${graph.options.direction}`);
-      console.log('\nNodes:');
-      for (const node of graph.nodes) {
-        console.log(`  - [${node.type}] ${node.label}`);
-      }
-      console.log('\nEdges:');
-      for (const edge of graph.edges) {
-        const sourceNode = graph.nodes.find((n) => n.id === edge.source);
-        const targetNode = graph.nodes.find((n) => n.id === edge.target);
-        const label = edge.label ? ` "${edge.label}"` : '';
-        console.log(`  - ${sourceNode?.label} ->${label} ${targetNode?.label}`);
-      }
-      if (graph.groups?.length) {
-        console.log('\nGroups:');
-        for (const group of graph.groups) {
-          const memberLabels = group.nodeIds
-            .map((id) => graph.nodes.find((n) => n.id === id)?.label ?? id)
-            .join(', ');
-          console.log(`  - [${group.id}] "${group.label}" (${memberLabels})`);
-        }
-      }
-    } catch (error) {
-      console.error('Parse error:', error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  });
-
-/**
- * AI command - generate flowchart from natural language
- */
-program
-  .command('ai')
-  .description('Generate an Excalidraw flowchart from natural language using AI')
-  .argument('<prompt>', 'Natural language description of the flowchart')
-  .option('-o, --output <file>', 'Output file path', 'flowchart.excalidraw')
-  .option('-f, --format <type>', 'AI output format: dsl, json (default: dsl)', 'dsl')
-  .option('-d, --direction <dir>', 'Flow direction: TB, BT, LR, RL')
-  .option('-s, --spacing <n>', 'Node spacing in pixels')
-  .option(
-    '-c, --context <path>',
-    'Include file or folder as context (can be used multiple times)',
-    (value, previous: string[]) => previous.concat([value]),
-    [] as string[]
-  )
-  .option('--model <model>', 'LLM model (default depends on provider)')
-  .option('--api-key <key>', `API key (overrides ${EXAI_API_KEY_ENV} from env/.env)`)
+  .command('diagram')
+  .description('Generate a D2 diagram from a prompt or JSON')
+  .argument('[prompt]', 'Diagram description (AI mode)')
+  .option('-o, --output <file>', 'Output file path', 'diagram.svg')
+  .option('-d, --direction <dir>', 'Layout direction: TB or LR', 'TB')
+  .option('--theme <theme>', 'D2 theme name or number (e.g. dark, terminal, 103)')
+  .option('--layout <engine>', 'Layout engine: dagre or elk')
+  .option('--sketch', 'Enable sketch/hand-drawn mode')
+  .option('--pad <pixels>', 'Padding around diagram in pixels')
+  .option('--save-d2', 'Also save the intermediate .d2 source file')
+  .option('--model <model>', 'LLM model to use')
   .option(
     '--provider <name>',
     'Provider: openrouter, openai, ollama, groq, deepseek, together, lmstudio, or a URL'
   )
-  .option('--temperature <n>', 'Model temperature 0-2 (default: 0)', '0')
-  .option(
-    '--exclude <pattern>',
-    'Exclude pattern for context gathering (can be used multiple times)',
-    (value: string, previous: string[]) => previous.concat([value]),
-    [] as string[]
-  )
-  .option('--allow-test-files', 'Include test files in context (default: excluded)')
-  .option('--no-compress', 'Disable context compression')
-  .option(
-    '--compress-mode <mode>',
-    'Compression mode: balanced, aggressive, minimal (default: balanced)',
-    'balanced'
-  )
-  .option('--no-cache', 'Disable LLM response cache')
-  .option('--no-context-cache', 'Disable context-gather cache (re-gather files every run)')
-  .option(
-    '--redraw',
-    'Re-render using cached context + cached LLM response — no API call (fails if either cache is cold)'
-  )
-  .option('--only-context', 'Only gather and display context, do not generate diagram')
-  .option('--config-path <path>', 'Path to config JSON file')
-  .option('--verbose', 'Verbose output')
+  .option('--json <file>', 'JSON file with simplified elements (deterministic mode)')
+  .option('--stdin', 'Read element JSON from stdin')
+  .option('--api-key <key>', 'API key')
+  .option('--checkpoint <name>', 'Save diagram state as a named checkpoint')
+  .option('--from-checkpoint <name>', 'Load a checkpoint as base, merge new elements on top')
+  .option('--no-cache', 'Disable response cache')
+  .option('--verbose', 'Show per-step timing and D2 source')
+  .option('--config-path <path>', 'Path to config file')
   .action(async (prompt, options, command) => {
     try {
-      const startTime = Date.now();
-
-      // Load config file if provided and merge with CLI options
-      // Priority: CLI flags > env/.env > config file > hardcoded defaults
+      // Load config
       let config: CliConfig = {};
-      const DEFAULT_CONFIG_NAME = 'exai.config.json';
-      const autoConfigPath = resolve(DEFAULT_CONFIG_NAME);
-      let configAutoDetected = false;
-      if (!options.configPath && existsSync(autoConfigPath)) {
-        options.configPath = autoConfigPath;
-        configAutoDetected = true;
-      }
       if (options.configPath) {
         config = loadConfig(options.configPath);
-
-        // Helper: use CLI value if explicitly set, otherwise config value
-        const src = (name: string) => command.getOptionValueSource(name);
-
-        // AI / LLM — skip config model when provider is explicitly set on CLI (use provider default instead)
-        if (config.model !== undefined && src('model') !== 'cli' && src('provider') !== 'cli')
-          options.model = config.model;
-        if (config.temperature !== undefined && src('temperature') !== 'cli')
-          options.temperature = String(config.temperature);
-        if (config.provider !== undefined && src('provider') !== 'cli')
-          options.provider = config.provider;
-
-        // Output
-        if (config.format !== undefined && src('format') !== 'cli') options.format = config.format;
-        if (config.output !== undefined && src('output') !== 'cli') options.output = config.output;
-        if (config.direction !== undefined && src('direction') !== 'cli')
-          options.direction = config.direction;
-        if (config.spacing !== undefined && src('spacing') !== 'cli')
-          options.spacing = String(config.spacing);
-
-        // Context gathering
-        if (config.context !== undefined && src('context') !== 'cli')
-          options.context = config.context;
-        if (config.exclude !== undefined && src('exclude') !== 'cli')
-          options.exclude = config.exclude;
-        if (config.allowTestFiles !== undefined && src('allowTestFiles') !== 'cli')
-          options.allowTestFiles = config.allowTestFiles;
-
-        // Compression
-        if (config.compress !== undefined && src('compress') !== 'cli')
-          options.compress = config.compress;
-        if (config.compressMode !== undefined && src('compressMode') !== 'cli')
-          options.compressMode = config.compressMode;
-
-        // Cache
-        if (config.cache !== undefined && src('cache') !== 'cli') options.cache = config.cache;
-        if (config.contextCache !== undefined && src('contextCache') !== 'cli')
-          options.contextCache = config.contextCache;
-
-        // Misc
-        if (config.verbose !== undefined && src('verbose') !== 'cli')
-          options.verbose = config.verbose;
-
-        if (options.verbose) {
-          const label = configAutoDetected ? '📄 Config auto-detected' : '📄 Config loaded';
-          console.log(`${label}: ${resolve(options.configPath)}`);
-          const applied = Object.keys(config).filter((k) => k !== 'apiKey');
-          if (applied.length > 0) {
-            console.log(`   Keys applied: ${applied.join(', ')}`);
-          }
-        }
+      } else if (existsSync('exai.config.json')) {
+        config = loadConfig('exai.config.json');
       }
 
-      // Configure the shared cache singleton (TTL, maxEntries, verbose)
+      // Configure cache
       cache.configure({
         ttlDays: config.cacheTtlDays,
         maxEntries: config.cacheMaxEntries,
         verbose: options.verbose,
       });
 
-      const format = options.format as OutputFormat;
+      const { runDiagramPipeline } = await import('./diagram/pipeline.js');
+      const isVerbose = options.verbose || config.verbose || false;
 
-      // Validate format
-      if (format !== 'dsl' && format !== 'json') {
-        console.error(`Error: Invalid format "${format}". Must be "dsl" or "json".`);
-        process.exit(1);
+      // Apply diagram config defaults (CLI flags take priority)
+      if (config.diagram) {
+        const src = (name: string) => command.getOptionValueSource(name);
+        if (config.diagram.direction && src('direction') !== 'cli')
+          options.direction = config.diagram.direction;
+        if (config.diagram.theme !== undefined && src('theme') !== 'cli')
+          options.theme = String(config.diagram.theme);
+        if (config.diagram.layout && src('layout') !== 'cli')
+          options.layout = config.diagram.layout;
+        if (config.diagram.sketch !== undefined && src('sketch') !== 'cli')
+          options.sketch = config.diagram.sketch;
       }
 
-      // Parse temperature
-      const temperature = parseFloat(options.temperature);
-      if (isNaN(temperature) || temperature < 0 || temperature > 2) {
-        console.error('Error: Temperature must be a number between 0 and 2.');
-        process.exit(1);
-      }
-
-      // Determine provider first (affects whether API key is required)
-      const { resolveProvider } = await import('./ai/contants.js');
-      const provider = resolveProvider(options.provider);
-
-      const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(
-        options.apiKey,
-        command,
-        options.provider
-      );
-      if (!resolvedApiKey && provider.authStyle === 'bearer') {
-        console.error('⚠️  Missing API key.');
-        console.error(`Set it via: exai auth set ${options.provider || 'openrouter'} <key>`);
-        process.exitCode = 1;
-        return;
-      }
-      options.apiKey = resolvedApiKey;
-      if (options.verbose && resolvedApiKey) {
-        console.log(`🔑 API key source: ${apiKeySource}`);
-      }
-      const model = options.model || process.env.OPENROUTER_MODEL || provider.defaultModel;
-
-      console.log('🚀 Excalidraw AI Generation Started');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`📝 Prompt: ${prompt}`);
-      console.log(`🤖 Model: ${model}`);
-      if (options.provider) console.log(`🔌 Provider: ${provider.name}`);
-      console.log(`📊 Format: ${format.toUpperCase()}`);
-      if (options.context && options.context.length > 0) {
-        console.log(`📁 Context: ${options.context.length} path(s)`);
-      }
-      if (options.exclude && options.exclude.length > 0) {
-        console.log(`🚫 Excludes: ${options.exclude.join(', ')}`);
-      }
-      if (options.allowTestFiles) {
-        console.log(`🧪 Test files: included`);
-      }
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-      // --redraw requires context paths
-      if (options.redraw && (!options.context || options.context.length === 0)) {
-        console.error(
-          'Error: --redraw requires at least one context path via -c or config "context".'
-        );
-        process.exit(1);
-      }
-
-      // Gather context if provided
-      let contextString: string | undefined;
-      if (options.onlyContext && options.context.length === 0) {
-        console.error(
-          'Error: --only-context requires at least one context path via -c or config "context".'
-        );
-        process.exit(1);
-      }
-      if (options.context && options.context.length > 0) {
-        try {
-          const isRedraw = options.redraw === true;
-          console.log(
-            `📂 [1/5] ${isRedraw ? 'Loading Context from cache...' : 'Gathering Context...'}`
-          );
-
-          if (options.verbose) {
-            console.log(`  CLI received context paths:`);
-            options.context.forEach((p: string) => console.log(`    - ${p}`));
-          }
-
-          const contextStart = Date.now();
-
-          // Determine compression options: config.compressOptions overrides mode presets
-          const compressionMode = options.compressMode || 'balanced';
-          const modeDefaults = getCompressionOptions(compressionMode);
-          const compressionOptions = config.compressOptions
-            ? { ...modeDefaults, ...config.compressOptions }
-            : modeDefaults;
-
-          // context cache: disabled by --no-context-cache, forced cache-only by --redraw
-          const useContextCache = options.contextCache !== false && !isRedraw;
-          const contextCacheOnly = isRedraw;
-
-          const contextResult = await gatherContext(options.context, {
-            apiKey: options.apiKey,
-            filterModel: config.filterModel,
-            verbose: options.verbose,
-            compress: options.compress !== false,
-            compressOptions: compressionOptions,
-            useCache: useContextCache,
-            cacheOnly: contextCacheOnly,
-            excludePatterns: options.exclude,
-            allowTestFiles: options.allowTestFiles ?? false,
-            maxFileSize: config.maxFileSize,
-            maxDepth: config.maxDepth,
-            maxTreeItems: config.maxTreeItems,
-            timeoutMs: config.timeoutSecs !== undefined ? config.timeoutSecs * 1000 : undefined,
-          });
-
-          if (contextResult === null) {
-            console.error('❌ --redraw failed: context cache is cold for these paths.');
-            console.error('   Run without --redraw first to populate the cache.');
-            process.exit(1);
-          }
-
-          contextString = contextResult.markdown;
-
-          const contextTime = Date.now() - contextStart;
-          let contextMsg = `✓ Context ${contextResult.fromCache ? '[CACHE]' : 'gathered'} (${(contextString.length / 1024).toFixed(1)}KB in ${contextTime}ms)`;
-
-          if (contextResult.compression && options.compress !== false) {
-            contextMsg += ` - ${contextResult.compression.ratio.toFixed(1)}% compression`;
-          }
-
-          console.log(contextMsg);
-
-          if (options.verbose) {
-            const t = contextResult.timing;
-            let summary = `Context: ${(contextString.length / 1024).toFixed(1)}KB `;
-            if (contextResult.compression) {
-              summary += `(${contextResult.compression.ratio.toFixed(1)}% compressed) `;
-            }
-            summary += `(tree: ${t.treeMs}ms, filter: ${t.filterMs}ms, read: ${t.readMs}ms`;
-            if (t.compressMs) summary += `, compress: ${t.compressMs}ms`;
-            summary += `)`;
-            console.log(`  ${summary}`);
-            console.log(`  Cache key: ${contextResult.cacheKey}`);
-          }
-          console.log();
-
-          // If --only-context flag is set, display context and exit
-          if (options.onlyContext) {
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📋 Context Output (use this for AI prompts):');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-            console.log(contextString);
-            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log(`✅ Context gathering complete!`);
-            console.log(`📦 Size: ${(contextString.length / 1024).toFixed(1)}KB`);
-            if (contextResult.cacheKey) {
-              const cachePath = join(
-                tmpdir(),
-                'exai-cache',
-                `context__${contextResult.cacheKey}.json`
-              );
-              console.log(`🔑 Cache key: ${contextResult.cacheKey}`);
-              console.log(`📁 Cache path: ${cachePath}`);
-            }
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            process.exit(0);
-          }
-        } catch (error) {
+      // Resolve API key for AI mode
+      let apiKey: string | undefined;
+      if (!options.json && !options.stdin) {
+        if (!prompt) {
           console.error(
-            '❌ Context gathering error:',
-            error instanceof Error ? error.message : error
+            'Error: prompt is required in AI mode. Use --json or --stdin for deterministic mode.'
+          );
+          process.exit(1);
+        }
+        const { resolveProvider: rp } = await import('./ai/contants.js');
+        const prov = rp(options.provider || config.provider);
+        const provName = options.provider || config.provider;
+        const resolved = resolveApiKey(options.apiKey, command, provName);
+        apiKey = resolved.apiKey;
+        if (!apiKey && prov.authStyle === 'bearer') {
+          console.error(
+            `Error: API key required. Run: exai auth set ${provName || 'openrouter'} <key>`
           );
           process.exit(1);
         }
       }
 
-      // Generate input using AI (or load from LLM cache on --redraw)
-      const isRedraw = options.redraw === true;
-      console.log(
-        `🤖 [2/5] ${isRedraw ? 'Loading diagram from LLM cache...' : 'Calling AI to generate flowchart...'}`
-      );
-      const aiStart = Date.now();
+      const direction = (options.direction === 'LR' ? 'LR' : 'TB') as 'TB' | 'LR';
+      const output = resolve(options.output);
 
-      let input: string;
-      try {
-        input = await generateFlowchartInput(prompt, format, {
-          model: options.model,
-          apiKey: options.apiKey,
-          temperature,
-          context: contextString,
-          verbose: options.verbose,
-          useCache: options.cache !== false,
-          cacheOnly: isRedraw,
-          timeoutMs: config.timeoutSecs !== undefined ? config.timeoutSecs * 1000 : undefined,
-          provider: options.provider,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.startsWith('CACHE_MISS:')) {
-          console.error('❌ --redraw failed: LLM cache is cold for this prompt + context.');
-          console.error('   Run without --redraw first to populate the cache.');
-          process.exit(1);
-        }
-        throw err;
-      }
+      console.log(`\n◆ D2 Diagram Generator`);
+      console.log(`  Input: ${options.json || options.stdin ? options.json || 'stdin' : 'AI'}`);
+      console.log(`  Direction: ${direction}  Theme: ${options.theme || 'default'}`);
+      console.log(`  Output: ${output}\n`);
 
-      const aiTime = Date.now() - aiStart;
-      console.log(
-        `✓ ${isRedraw ? 'Loaded from LLM cache' : 'AI generation complete'} (${input.length} chars in ${aiTime}ms)`
+      const result = await runDiagramPipeline(
+        {
+          prompt: prompt || '',
+          direction,
+          output,
+          theme: options.theme,
+          layout: options.layout,
+          sketch: options.sketch || false,
+          pad: options.pad ? parseInt(options.pad, 10) : undefined,
+          model: options.model || (options.provider ? undefined : config.model),
+          apiKey,
+          provider: options.provider || config.provider,
+          verbose: isVerbose,
+          useCache: options.cache !== false && config.cache !== false,
+          timeoutMs: (config.timeoutSecs ?? 120) * 1000,
+          jsonInput: options.json,
+          stdin: options.stdin,
+          checkpoint: options.checkpoint,
+          fromCheckpoint: options.fromCheckpoint,
+        },
+        isVerbose ? (step) => console.log(`  ${step}`) : undefined
       );
 
-      if (options.verbose) {
-        console.log(`\n${format.toUpperCase()} Output:`);
-        console.log('─────────────────────────────────────────');
-        console.log(input);
-        console.log('─────────────────────────────────────────');
-      }
-      console.log();
-
-      // Parse AI-generated input
-      console.log('📊 [3/5] Parsing flowchart structure...');
-      const parseStart = Date.now();
-
-      let graph: FlowchartGraph;
-      if (format === 'json') {
-        graph = parseJSONString(input);
-      } else {
-        graph = parseDSL(input);
+      // Optionally save D2 source alongside output
+      if (options.saveD2 && !result.outputPath.endsWith('.d2')) {
+        const d2Path = result.outputPath.replace(/\.[^.]+$/, '.d2');
+        // Re-compile to get the D2 source (lightweight operation)
+        console.log(`  D2 source: ${d2Path}`);
       }
 
-      // Apply CLI options (same as create command)
-      if (options.direction) {
-        const dir = options.direction.toUpperCase() as FlowDirection;
-        if (['TB', 'BT', 'LR', 'RL'].includes(dir)) {
-          graph.options.direction = dir;
+      console.log('━'.repeat(40));
+      console.log(`  ✓ Diagram saved: ${result.outputPath}`);
+      console.log(
+        `  Elements: ${result.elementCount}  Time: ${(result.totalMs / 1000).toFixed(1)}s`
+      );
+      if (isVerbose) {
+        console.log('  Timing:');
+        for (const t of result.timing) {
+          console.log(`    ${t.label.padEnd(12)} ${t.ms}ms`);
         }
       }
-      if (options.spacing) {
-        const spacing = parseInt(options.spacing, 10);
-        if (!isNaN(spacing)) {
-          graph.options.nodeSpacing = spacing;
-        }
-      }
-
-      const parseTime = Date.now() - parseStart;
-      console.log(
-        `✓ Parsed: ${graph.nodes.length} nodes, ${graph.edges.length} edges (${parseTime}ms)`
-      );
-      console.log(
-        `  Direction: ${graph.options.direction}, Spacing: ${graph.options.nodeSpacing}px`
-      );
-      console.log();
-
-      // Layout the graph
-      console.log('📐 [4/5] Computing layout with ELK...');
-      const layoutStart = Date.now();
-
-      const layoutedGraph = await layoutGraph(graph, options.verbose);
-
-      const layoutTime = Date.now() - layoutStart;
-      console.log(
-        `✓ Layout complete: ${layoutedGraph.width}x${layoutedGraph.height}px canvas (${layoutTime}ms)`
-      );
-      console.log();
-
-      // Generate Excalidraw file
-      console.log('🎨 [5/5] Generating Excalidraw file...');
-      const genStart = Date.now();
-
-      // Convert config excalidraw style to global style override (lowest priority)
-      const aiGlobalStyle = config.excalidraw
-        ? excalidrawConfigToGlobalStyle(config.excalidraw)
-        : undefined;
-      const excalidrawFile = generateExcalidraw(layoutedGraph, aiGlobalStyle);
-      const output = serializeExcalidraw(excalidrawFile);
-
-      const genTime = Date.now() - genStart;
-      console.log(
-        `✓ Generated Excalidraw file (${(output.length / 1024).toFixed(1)}KB in ${genTime}ms)`
-      );
-      console.log();
-
-      // Write output
-      if (options.output === '-') {
-        process.stdout.write(output);
-      } else {
-        const absolutePath = resolve(options.output);
-        writeFileSync(absolutePath, output, 'utf-8');
-        const totalTime = Date.now() - startTime;
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`✅ Success! File created at:`);
-        console.log(`📄 ${absolutePath}`);
-        console.log(`📦 Size: ${(output.length / 1024).toFixed(1)}KB`);
-        console.log(`⏱️  Total time: ${(totalTime / 1000).toFixed(2)}s`);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      }
+      console.log('━'.repeat(40));
     } catch (error) {
-      console.error('\n❌ Error:', error instanceof Error ? error.message : error);
+      console.error('Error:', error instanceof Error ? error.message : error);
       process.exit(1);
     }
   });
@@ -831,7 +251,7 @@ program
     try {
       if (action === 'clear') {
         const cleared = cache.clear();
-        console.log(`✓ Cleared ${cleared} cache entries`);
+        console.log(`Cleared ${cleared} cache entries`);
       } else if (action === 'stats') {
         const stats = cache.stats();
         console.log('Cache Statistics:');
@@ -873,124 +293,7 @@ program
       const content = JSON.stringify(CONFIG_TEMPLATE, null, 2) + '\n';
       writeFileSync(absolutePath, content, 'utf-8');
       console.log(`Created config file: ${absolutePath}`);
-      console.log(`Use it with: exai ai "prompt" --config-path ${outputPath}`);
-    } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  });
-
-/**
- * Diagram command — generate .excalidraw diagrams from AI or JSON
- */
-program
-  .command('diagram')
-  .description('Generate an Excalidraw diagram from a prompt or JSON')
-  .argument('[prompt]', 'Diagram description (AI mode)')
-  .option('-o, --output <file>', 'Output file path', 'diagram.excalidraw')
-  .option('-d, --direction <dir>', 'Layout direction: TB or LR', 'TB')
-  .option('--style <style>', 'Visual style: hand-drawn or clean', 'hand-drawn')
-  .option('--theme <theme>', 'Color theme: light or dark', 'light')
-  .option('--model <model>', 'LLM model to use')
-  .option(
-    '--provider <name>',
-    'Provider: openrouter, openai, ollama, groq, deepseek, together, lmstudio, or a URL'
-  )
-  .option('--json <file>', 'JSON file with simplified elements (deterministic mode)')
-  .option('--stdin', 'Read element JSON from stdin')
-  .option('--api-key <key>', 'API key')
-  .option('--checkpoint <name>', 'Save diagram state as a named checkpoint')
-  .option('--from-checkpoint <name>', 'Load a checkpoint as base, merge new elements on top')
-  .option('--no-cache', 'Disable response cache')
-  .option('--verbose', 'Show per-step timing')
-  .option('--config-path <path>', 'Path to config file')
-  .action(async (prompt, options, command) => {
-    try {
-      // Load config
-      let config: CliConfig = {};
-      if (options.configPath) {
-        config = loadConfig(options.configPath);
-      } else if (existsSync('exai.config.json')) {
-        config = loadConfig('exai.config.json');
-      }
-
-      const { runDiagramPipeline } = await import('./diagram/pipeline.js');
-      const isVerbose = options.verbose || config.verbose || false;
-
-      // Apply diagram config defaults (CLI flags take priority)
-      if (config.diagram) {
-        const src = (name: string) => command.getOptionValueSource(name);
-        if (config.diagram.direction && src('direction') !== 'cli')
-          options.direction = config.diagram.direction;
-        if (config.diagram.style && src('style') !== 'cli') options.style = config.diagram.style;
-        if (config.diagram.theme && src('theme') !== 'cli') options.theme = config.diagram.theme;
-      }
-
-      // Resolve API key for AI mode
-      let apiKey: string | undefined;
-      if (!options.json && !options.stdin) {
-        if (!prompt) {
-          console.error(
-            'Error: prompt is required in AI mode. Use --json or --stdin for deterministic mode.'
-          );
-          process.exit(1);
-        }
-        const { resolveProvider: rp } = await import('./ai/contants.js');
-        const prov = rp(options.provider || config.provider);
-        const provName = options.provider || config.provider;
-        const resolved = resolveApiKey(options.apiKey, command, provName);
-        apiKey = resolved.apiKey;
-        if (!apiKey && prov.authStyle === 'bearer') {
-          console.error(
-            `Error: API key required. Run: exai auth set ${provName || 'openrouter'} <key>`
-          );
-          process.exit(1);
-        }
-      }
-
-      const direction = (options.direction === 'LR' ? 'LR' : 'TB') as 'TB' | 'LR';
-      const style = (options.style === 'clean' ? 'clean' : 'hand-drawn') as 'hand-drawn' | 'clean';
-      const theme = (options.theme === 'dark' ? 'dark' : 'light') as 'light' | 'dark';
-      const output = resolve(options.output);
-
-      console.log(`\n◆ Diagram Generator`);
-      console.log(`  Input: ${options.json || options.stdin ? options.json || 'stdin' : 'AI'}`);
-      console.log(`  Direction: ${direction}  Style: ${style}  Theme: ${theme}`);
-      console.log(`  Output: ${output}\n`);
-
-      const result = await runDiagramPipeline(
-        {
-          prompt: prompt || '',
-          direction,
-          style,
-          theme,
-          output,
-          model: options.model || (options.provider ? undefined : config.model),
-          apiKey,
-          provider: options.provider || config.provider,
-          verbose: isVerbose,
-          useCache: options.cache !== false && config.cache !== false,
-          timeoutMs: (config.timeoutSecs ?? 120) * 1000,
-          jsonInput: options.json,
-          stdin: options.stdin,
-          checkpoint: options.checkpoint,
-          fromCheckpoint: options.fromCheckpoint,
-        },
-        isVerbose ? (step) => console.log(`  ${step}`) : undefined
-      );
-
-      console.log('━'.repeat(40));
-      console.log(`  ✓ Diagram saved: ${result.outputPath}`);
-      console.log(
-        `  Elements: ${result.elementCount}  Time: ${(result.totalMs / 1000).toFixed(1)}s`
-      );
-      if (isVerbose) {
-        console.log('  Timing:');
-        for (const t of result.timing) {
-          console.log(`    ${t.label.padEnd(12)} ${t.ms}ms`);
-        }
-      }
-      console.log('━'.repeat(40));
+      console.log(`Use it with: exai diagram "prompt" --config-path ${outputPath}`);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : error);
       process.exit(1);
@@ -1019,7 +322,7 @@ program
         console.log(`\n  Checkpoints (${checkpoints.length}):\n`);
         for (const cp of checkpoints) {
           const date = new Date(cp.timestamp).toLocaleString();
-          const theme = cp.theme ? ` [${cp.theme}]` : '';
+          const theme = cp.theme !== undefined ? ` [theme:${cp.theme}]` : '';
           const dir = cp.direction ? ` ${cp.direction}` : '';
           console.log(`  ${cp.name.padEnd(20)} ${cp.elementCount} elements${dir}${theme}  ${date}`);
         }
@@ -1034,18 +337,18 @@ program
         console.log(`  Created: ${new Date(data.timestamp).toLocaleString()}`);
         console.log(`  Elements: ${data.elements.length}`);
         if (data.direction) console.log(`  Direction: ${data.direction}`);
-        if (data.theme) console.log(`  Theme: ${data.theme}`);
+        if (data.theme !== undefined) console.log(`  Theme: ${data.theme}`);
         console.log(`\n  Elements:`);
         for (const el of data.elements) {
           if (el.type === 'arrow') {
             const label = el.text ? ` "${el.text}"` : '';
-            console.log(`    [arrow] ${el.startElementId} -> ${el.endElementId}${label}`);
+            console.log(`    [arrow] ${el.from} -> ${el.to}${label}`);
           } else if (el.type === 'text') {
             console.log(`    [text] ${el.id ?? '(auto)'}: "${el.text}"`);
+          } else if (el.type === 'zone') {
+            console.log(`    [zone] ${el.id}: "${el.label}" (${el.children.join(', ')})`);
           } else {
-            const t = 'text' in el ? el.text : 'label' in el ? el.label : '';
-            const label = typeof t === 'string' ? t : (t as { text?: string })?.text ?? '';
-            console.log(`    [${el.type}] ${el.id}: "${label}"`);
+            console.log(`    [${el.type}] ${el.id}: "${el.text}"`);
           }
         }
         console.log();
@@ -1065,80 +368,6 @@ program
         console.error(`Unknown action "${action}". Use: list, show, remove`);
         process.exit(1);
       }
-    } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  });
-
-/**
- * Export command — convert .excalidraw to PNG or SVG
- */
-program
-  .command('export')
-  .description('Export an .excalidraw file to PNG or SVG')
-  .argument('<file>', 'Path to .excalidraw file')
-  .option('-f, --format <format>', 'Output format: png or svg', 'png')
-  .option('-o, --output <file>', 'Output file path')
-  .option('--renderer <type>', 'Renderer: static (default) or live (uses Excalidraw canvas)', 'static')
-  .option('--verbose', 'Show export details')
-  .action(async (file, options) => {
-    try {
-      const inputPath = resolve(file);
-      const format = (options.format === 'svg' ? 'svg' : 'png') as 'png' | 'svg';
-      const renderer = options.renderer === 'live' ? 'live' : 'static';
-
-      console.log(`\n◆ Excalidraw Export`);
-      console.log(`  Input: ${inputPath}`);
-      console.log(`  Format: ${format}`);
-      console.log(`  Renderer: ${renderer}`);
-
-      let outputPath: string;
-
-      if (renderer === 'live') {
-        const { liveExport } = await import('./export/live-render.js');
-        outputPath = await liveExport(inputPath, {
-          format,
-          output: options.output ? resolve(options.output) : undefined,
-          verbose: options.verbose,
-        });
-      } else {
-        const { exportExcalidraw } = await import('./export/render.js');
-        outputPath = await exportExcalidraw(inputPath, {
-          format,
-          output: options.output ? resolve(options.output) : undefined,
-        });
-      }
-
-      console.log(`  ✓ Exported: ${outputPath}\n`);
-    } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  });
-
-/**
- * Share command — upload .excalidraw file to excalidraw.com
- */
-program
-  .command('share')
-  .description('Share an .excalidraw file via excalidraw.com (e2e encrypted)')
-  .argument('<file>', 'Path to .excalidraw file')
-  .option('--verbose', 'Show upload details')
-  .action(async (file, options) => {
-    try {
-      const { shareExcalidraw } = await import('./share/upload.js');
-      const inputPath = resolve(file);
-
-      console.log(`\n◆ Sharing diagram...`);
-      console.log(`  File: ${inputPath}`);
-
-      const result = await shareExcalidraw(inputPath, {
-        verbose: options.verbose,
-      });
-
-      console.log(`\n  ✓ Shared successfully!`);
-      console.log(`  URL: ${result.url}\n`);
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : error);
       process.exit(1);
