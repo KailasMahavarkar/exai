@@ -811,6 +811,8 @@ program
     .option('--json <file>', 'JSON file with simplified elements (deterministic mode)')
     .option('--stdin', 'Read element JSON from stdin')
     .option('--api-key <key>', 'OpenRouter API key')
+    .option('--checkpoint <name>', 'Save diagram state as a named checkpoint')
+    .option('--from-checkpoint <name>', 'Load a checkpoint as base, merge new elements on top')
     .option('--no-cache', 'Disable response cache')
     .option('--verbose', 'Show per-step timing')
     .option('--config-path <path>', 'Path to config file')
@@ -873,6 +875,8 @@ program
                 timeoutMs: (config.timeoutSecs ?? 120) * 1000,
                 jsonInput: options.json,
                 stdin: options.stdin,
+                checkpoint: options.checkpoint,
+                fromCheckpoint: options.fromCheckpoint,
             }, isVerbose ? (step) => console.log(`  ${step}`) : undefined);
 
             console.log('━'.repeat(40));
@@ -885,6 +889,76 @@ program
                 }
             }
             console.log('━'.repeat(40));
+        } catch (error) {
+            console.error('Error:', error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
+
+/**
+ * Checkpoint command — manage saved diagram checkpoints
+ */
+program
+    .command('checkpoint')
+    .description('Manage diagram checkpoints')
+    .argument('<action>', 'Action: list, show, remove')
+    .argument('[name]', 'Checkpoint name (for show/remove)')
+    .action(async (action, name) => {
+        try {
+            const { listCheckpoints, showCheckpoint, removeCheckpoint } = await import('./diagram/checkpoint.js');
+
+            if (action === 'list') {
+                const checkpoints = listCheckpoints();
+                if (checkpoints.length === 0) {
+                    console.log('No checkpoints saved.');
+                    return;
+                }
+                console.log(`\n  Checkpoints (${checkpoints.length}):\n`);
+                for (const cp of checkpoints) {
+                    const date = new Date(cp.timestamp).toLocaleString();
+                    const theme = cp.theme ? ` [${cp.theme}]` : '';
+                    const dir = cp.direction ? ` ${cp.direction}` : '';
+                    console.log(`  ${cp.name.padEnd(20)} ${cp.elementCount} elements${dir}${theme}  ${date}`);
+                }
+                console.log();
+            } else if (action === 'show') {
+                if (!name) {
+                    console.error('Error: checkpoint name required. Usage: exai checkpoint show <name>');
+                    process.exit(1);
+                }
+                const data = showCheckpoint(name);
+                console.log(`\n  Checkpoint: ${data.name}`);
+                console.log(`  Created: ${new Date(data.timestamp).toLocaleString()}`);
+                console.log(`  Elements: ${data.elements.length}`);
+                if (data.direction) console.log(`  Direction: ${data.direction}`);
+                if (data.theme) console.log(`  Theme: ${data.theme}`);
+                console.log(`\n  Elements:`);
+                for (const el of data.elements) {
+                    if (el.type === 'arrow') {
+                        const label = el.label ? ` "${el.label}"` : '';
+                        console.log(`    [arrow] ${el.from} -> ${el.to}${label}`);
+                    } else {
+                        const label = typeof el.label === 'string' ? el.label : el.label.text;
+                        console.log(`    [${el.type}] ${el.id}: "${label}"`);
+                    }
+                }
+                console.log();
+            } else if (action === 'remove') {
+                if (!name) {
+                    console.error('Error: checkpoint name required. Usage: exai checkpoint remove <name>');
+                    process.exit(1);
+                }
+                const removed = removeCheckpoint(name);
+                if (removed) {
+                    console.log(`Checkpoint "${name}" removed.`);
+                } else {
+                    console.error(`Checkpoint "${name}" not found.`);
+                    process.exit(1);
+                }
+            } else {
+                console.error(`Unknown action "${action}". Use: list, show, remove`);
+                process.exit(1);
+            }
         } catch (error) {
             console.error('Error:', error instanceof Error ? error.message : error);
             process.exit(1);
@@ -916,6 +990,58 @@ program
             });
 
             console.log(`  ✓ Exported: ${outputPath}\n`);
+        } catch (error) {
+            console.error('Error:', error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
+
+/**
+ * Share command — upload .excalidraw file to excalidraw.com
+ */
+program
+    .command('share')
+    .description('Share an .excalidraw file via excalidraw.com (e2e encrypted)')
+    .argument('<file>', 'Path to .excalidraw file')
+    .option('--verbose', 'Show upload details')
+    .action(async (file, options) => {
+        try {
+            const { shareExcalidraw } = await import('./share/upload.js');
+            const inputPath = resolve(file);
+
+            console.log(`\n◆ Sharing diagram...`);
+            console.log(`  File: ${inputPath}`);
+
+            const result = await shareExcalidraw(inputPath, {
+                verbose: options.verbose,
+            });
+
+            console.log(`\n  ✓ Shared successfully!`);
+            console.log(`  URL: ${result.url}\n`);
+        } catch (error) {
+            console.error('Error:', error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
+
+/**
+ * Reference command — built-in cheat sheet for diagram elements
+ */
+program
+    .command('reference')
+    .description('Show diagram element reference (colors, elements, sizing, tips)')
+    .argument('[section]', 'Section: colors, elements, sizing, tips, all', 'all')
+    .option('--json', 'Output as JSON for piping to LLM context')
+    .action(async (section, options) => {
+        try {
+            const { renderReference, getReferenceData } = await import('./reference/render.js');
+
+            if (options.json) {
+                const data = getReferenceData(section);
+                console.log(JSON.stringify(data, null, 2));
+            } else {
+                renderReference(section);
+            }
         } catch (error) {
             console.error('Error:', error instanceof Error ? error.message : error);
             process.exit(1);

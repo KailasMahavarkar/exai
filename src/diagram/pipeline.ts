@@ -20,7 +20,8 @@ import { parseElements, extractPseudoElements, expandLabels, applyDefaults, reso
 import { layoutElements, computeViewport } from './layout.js';
 import { buildExcalidrawFile } from './build-file.js';
 import { DIAGRAM_SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
-import type { DiagramPipelineConfig, DiagramPipelineResult, DiagramTimingEntry, DiagramTheme } from './types.js';
+import { loadCheckpoint, saveCheckpoint, mergeElements } from './checkpoint.js';
+import type { DiagramPipelineConfig, DiagramPipelineResult, DiagramTimingEntry, DiagramTheme, SimplifiedElement } from './types.js';
 
 export async function runDiagramPipeline(
     config: DiagramPipelineConfig,
@@ -89,14 +90,24 @@ export async function runDiagramPipeline(
     const allInput = time('Parse', () => parseElements(rawInput));
 
     // Step 3: Extract pseudo-elements
-    const { elements: simplified, viewportOverrides } = time('Pseudos', () =>
+    const { elements: simplified, viewportOverrides, restoreCheckpoint: restoreName } = time('Pseudos', () =>
         extractPseudoElements(allInput)
     );
+
+    // Step 3b: Load checkpoint if requested (--from-checkpoint or restoreCheckpoint pseudo)
+    let mergedElements: SimplifiedElement[] = simplified;
+    const checkpointName = restoreName || config.fromCheckpoint;
+    if (checkpointName) {
+        onProgress?.(`Loading checkpoint "${checkpointName}"...`);
+        const checkpoint = time('Checkpoint', () => loadCheckpoint(checkpointName));
+        mergedElements = mergeElements(checkpoint.elements, simplified);
+        onProgress?.(`Merged ${checkpoint.elements.length} base + ${simplified.length} new → ${mergedElements.length} elements`);
+    }
 
     // Step 4: Expand labels
     onProgress?.('Expanding labels...');
     const { excalidraw: shapes, arrows: rawArrows } = time('Expand', () =>
-        expandLabels(simplified, theme)
+        expandLabels(mergedElements, theme)
     );
 
     // Step 5: Apply defaults
@@ -123,6 +134,16 @@ export async function runDiagramPipeline(
     const outputJson = JSON.stringify(file, null, 2);
     mkdirSync(dirname(config.output), { recursive: true });
     writeFileSync(config.output, outputJson, 'utf-8');
+
+    // Step 10: Save checkpoint if requested
+    if (config.checkpoint) {
+        onProgress?.(`Saving checkpoint "${config.checkpoint}"...`);
+        saveCheckpoint(config.checkpoint, mergedElements, {
+            direction: config.direction,
+            style: config.style,
+            theme,
+        });
+    }
 
     const totalMs = Date.now() - totalStart;
 

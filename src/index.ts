@@ -60,6 +60,16 @@ export type {
 // Export (excalidraw → PNG/SVG)
 export { exportExcalidraw } from './export/render.js';
 
+// Share exports
+export { shareExcalidraw } from './share/upload.js';
+
+// Checkpoint exports
+export { saveCheckpoint, loadCheckpoint, listCheckpoints, removeCheckpoint } from './diagram/checkpoint.js';
+
+// Reference exports
+export { PALETTES, ELEMENT_FORMAT, SIZING, TIPS } from './reference/data.js';
+export { renderReference, getReferenceData } from './reference/render.js';
+
 // Config exports
 export { loadConfig, CONFIG_TEMPLATE } from './ai/config.js';
 export type { CliConfig, DiagramConfig } from './ai/config.js';
