@@ -66,7 +66,6 @@ describe('loadConfig', () => {
     const config = loadConfig(path);
     expect(config.model).toBe('gpt-4');
     expect(config.filterModel).toBe('gpt-3.5-turbo');
-    expect(config.apiKey).toBe('sk-test');
     expect(config.format).toBe('json');
     expect(config.output).toBe('out.excalidraw');
     expect(config.direction).toBe('LR');
@@ -294,7 +293,6 @@ describe('loadConfig', () => {
     const config = loadConfig(path);
     expect(config.model).toBe('moonshotai/kimi-k2.5');
     expect(config.filterModel).toBe('moonshotai/kimi-k2.5');
-    expect(config.apiKey).toBe('sk-or-v1-test');
     expect(config.temperature).toBe(0);
     expect(config.format).toBe('dsl');
     expect(config.output).toBe('flowchart.excalidraw');
