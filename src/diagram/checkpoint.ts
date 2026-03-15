@@ -140,7 +140,7 @@ export function mergeElements(
   for (const el of base) {
     const key =
       el.type === 'arrow'
-        ? `arrow:${el.from}:${el.to}`
+        ? `arrow:${el.startElementId}:${el.endElementId}`
         : (el as { id?: string }).id ?? `auto:${result.size}`;
     result.set(key, el);
   }
@@ -149,7 +149,7 @@ export function mergeElements(
   for (const el of additions) {
     const key =
       el.type === 'arrow'
-        ? `arrow:${el.from}:${el.to}`
+        ? `arrow:${el.startElementId}:${el.endElementId}`
         : (el as { id?: string }).id ?? `auto:${result.size}`;
     result.set(key, el);
   }

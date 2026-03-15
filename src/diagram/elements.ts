@@ -75,16 +75,7 @@ export function parseElements(raw: string): DiagramInputElement[] {
     if (PSEUDO_TYPES.has(el.type)) continue;
 
     if (el.type === 'arrow') {
-      // Normalize: startElementId/endElementId are primary, from/to are legacy aliases
-      if (!el.startElementId && el.from) el.startElementId = el.from;
-      if (!el.endElementId && el.to) el.endElementId = el.to;
-      // Write back to from/to for internal pipeline compatibility
-      if (el.startElementId) el.from = el.startElementId;
-      if (el.endElementId) el.to = el.endElementId;
-      // Normalize: text is primary, label is legacy alias
-      if (!el.text && el.label) el.text = el.label;
-      if (el.text) el.label = el.text;
-      if (!el.from || !el.to) {
+      if (!el.startElementId || !el.endElementId) {
         throw new Error(`Arrow missing "startElementId"/"endElementId": ${JSON.stringify(el)}`);
       }
     } else if (el.type === 'text') {
@@ -96,10 +87,7 @@ export function parseElements(raw: string): DiagramInputElement[] {
         throw new Error(`Zone missing "children": ${JSON.stringify(el)}`);
     } else {
       if (!el.id) throw new Error(`Shape missing "id": ${JSON.stringify(el)}`);
-      // Normalize: text is primary, label is legacy alias
-      if (!el.label && el.text) el.label = el.text;
-      if (!el.text && el.label) el.text = el.label;
-      if (!el.label && !el.text) throw new Error(`Shape missing "text": ${JSON.stringify(el)}`);
+      if (!el.text) throw new Error(`Shape missing "text": ${JSON.stringify(el)}`);
       // Validate rich label
       if (typeof el.label === 'object') {
         if (!el.label.text) {
@@ -363,7 +351,7 @@ export function expandLabels(
     }
 
     const shape = el as SimplifiedShape;
-    const richLabel = normalizeLabel(shape.label);
+    const richLabel = normalizeLabel(shape.text);
     const textId = `${shape.id}-text`;
     const fontSize = richLabel.fontSize ?? DEFAULT_FONT_SIZE;
     const textSize = estimateTextSize(richLabel.text, fontSize);
@@ -484,15 +472,15 @@ export function resolveBindings(
   const labelMap = new Map<string, string>();
 
   for (const arr of arrows) {
-    const source = shapeMap.get(arr.from);
-    const target = shapeMap.get(arr.to);
+    const source = shapeMap.get(arr.startElementId);
+    const target = shapeMap.get(arr.endElementId);
 
     if (!source || !target) {
-      console.warn(`Arrow skipped: "${arr.from}" → "${arr.to}" — shape not found`);
+      console.warn(`Arrow skipped: "${arr.startElementId}" → "${arr.endElementId}" — shape not found`);
       continue;
     }
 
-    const arrowId = arr.id ?? `arrow-${arr.from}-${arr.to}-${nanoid(4)}`;
+    const arrowId = arr.id ?? `arrow-${arr.startElementId}-${arr.endElementId}-${nanoid(4)}`;
 
     // Determine edge points based on layout direction
     const [srcFixed, dstFixed] =
@@ -523,13 +511,13 @@ export function resolveBindings(
         startArrowhead: null,
         endArrowhead: 'arrow',
         startBinding: {
-          elementId: arr.from,
+          elementId: arr.startElementId,
           focus: 0,
           gap: 8,
           fixedPoint: srcFixed,
         },
         endBinding: {
-          elementId: arr.to,
+          elementId: arr.endElementId,
           focus: 0,
           gap: 8,
           fixedPoint: dstFixed,
@@ -539,7 +527,7 @@ export function resolveBindings(
     );
 
     // If arrow has a label, bind text to arrow
-    if (arr.label) {
+    if (arr.text) {
       const labelId = `${arrowId}-label`;
       arrowEl.boundElements = [{ type: 'text' as const, id: labelId }];
     }
@@ -557,9 +545,9 @@ export function resolveBindings(
     addArrowBinding(target);
 
     // If arrow has a label, create bound text
-    if (arr.label) {
+    if (arr.text) {
       const labelId = `${arrowId}-label`;
-      const labelSize = estimateTextSize(arr.label, ARROW_LABEL_FONT_SIZE);
+      const labelSize = estimateTextSize(arr.text, ARROW_LABEL_FONT_SIZE);
 
       arrowElements.push(
         baseElement(
@@ -573,13 +561,13 @@ export function resolveBindings(
             strokeWidth: 1,
             roundness: null,
             boundElements: null,
-            text: arr.label,
+            text: arr.text,
             fontSize: ARROW_LABEL_FONT_SIZE,
             fontFamily: 1,
             textAlign: 'center',
             verticalAlign: 'middle',
             containerId: arrowId,
-            originalText: arr.label,
+            originalText: arr.text,
             autoResize: true,
             lineHeight: LINE_HEIGHT,
             baseline: Math.round(ARROW_LABEL_FONT_SIZE * LINE_HEIGHT),

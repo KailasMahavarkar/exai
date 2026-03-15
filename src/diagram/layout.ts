@@ -41,9 +41,9 @@ function topoSort(shapeIds: string[], arrows: SimplifiedArrow[]): LayoutNode[] {
   }
 
   for (const arr of arrows) {
-    if (!idSet.has(arr.from) || !idSet.has(arr.to)) continue;
-    adj.get(arr.from)!.push(arr.to);
-    inDeg.set(arr.to, (inDeg.get(arr.to) ?? 0) + 1);
+    if (!idSet.has(arr.startElementId) || !idSet.has(arr.endElementId)) continue;
+    adj.get(arr.startElementId)!.push(arr.endElementId);
+    inDeg.set(arr.endElementId, (inDeg.get(arr.endElementId) ?? 0) + 1);
   }
 
   // BFS layering (Kahn's algorithm)

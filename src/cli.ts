@@ -1038,13 +1038,13 @@ program
         console.log(`\n  Elements:`);
         for (const el of data.elements) {
           if (el.type === 'arrow') {
-            const label = el.label ? ` "${el.label}"` : '';
-            console.log(`    [arrow] ${el.from} -> ${el.to}${label}`);
+            const label = el.text ? ` "${el.text}"` : '';
+            console.log(`    [arrow] ${el.startElementId} -> ${el.endElementId}${label}`);
           } else if (el.type === 'text') {
             console.log(`    [text] ${el.id ?? '(auto)'}: "${el.text}"`);
           } else {
-            const labelVal = (el as { text?: unknown; label?: unknown }).text ?? (el as { label?: unknown }).label;
-            const label = typeof labelVal === 'string' ? labelVal : (labelVal as { text?: string })?.text ?? '(no label)';
+            const t = 'text' in el ? el.text : 'label' in el ? el.label : '';
+            const label = typeof t === 'string' ? t : (t as { text?: string })?.text ?? '';
             console.log(`    [${el.type}] ${el.id}: "${label}"`);
           }
         }

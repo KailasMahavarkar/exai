@@ -66,10 +66,8 @@ export const THEME_PRESETS: Record<DiagramTheme, ThemeColors> = {
 export interface SimplifiedShape {
   type: 'rectangle' | 'ellipse' | 'diamond';
   id: string;
-  /** Text label on the shape (Excalidraw native). Use \n for multiline. */
-  text?: LabelValue;
-  /** Shape label (always set after normalization) */
-  label: LabelValue;
+  /** Text label on the shape. Use \n for multiline. */
+  text: LabelValue;
   backgroundColor?: string;
   strokeColor?: string;
   width?: number;
@@ -83,18 +81,12 @@ export interface SimplifiedShape {
 export interface SimplifiedArrow {
   type: 'arrow';
   id?: string;
-  /** Source shape ID (Excalidraw native) */
-  startElementId?: string;
-  /** Target shape ID (Excalidraw native) */
-  endElementId?: string;
-  /** Source shape ID (legacy alias for startElementId) */
-  from: string;
-  /** Target shape ID (legacy alias for endElementId) */
-  to: string;
+  /** Source shape ID */
+  startElementId: string;
+  /** Target shape ID */
+  endElementId: string;
   /** Label text on the arrow */
   text?: string;
-  /** Arrow label (legacy alias for text) */
-  label?: string;
   strokeColor?: string;
   /** 'solid' | 'dashed' | 'dotted' */
   strokeStyle?: string;
