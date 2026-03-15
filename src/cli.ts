@@ -432,8 +432,8 @@ program
                 // Helper: use CLI value if explicitly set, otherwise config value
                 const src = (name: string) => command.getOptionValueSource(name);
 
-                // AI / LLM
-                if (config.model !== undefined && src('model') !== 'cli') options.model = config.model;
+                // AI / LLM — skip config model when provider is explicitly set on CLI (use provider default instead)
+                if (config.model !== undefined && src('model') !== 'cli' && src('provider') !== 'cli') options.model = config.model;
                 if (config.temperature !== undefined && src('temperature') !== 'cli') options.temperature = String(config.temperature);
                 if (config.provider !== undefined && src('provider') !== 'cli') options.provider = config.provider;
 
@@ -877,7 +877,7 @@ program
                 style,
                 theme,
                 output,
-                model: options.model || config.model,
+                model: options.model || (options.provider ? undefined : config.model),
                 apiKey,
                 provider: options.provider || config.provider,
                 verbose: isVerbose,
