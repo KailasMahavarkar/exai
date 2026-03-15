@@ -70,6 +70,9 @@ export { saveCheckpoint, loadCheckpoint, listCheckpoints, removeCheckpoint } fro
 export { PALETTES, ELEMENT_FORMAT, SIZING, TIPS } from './reference/data.js';
 export { renderReference, getReferenceData } from './reference/render.js';
 
+// Auth/session exports
+export { loadSession, setKey, getKey, removeKey, listKeys, resolveApiKeyFull } from './auth/session.js';
+
 // Provider exports
 export { PROVIDER_PRESETS, resolveProvider } from './ai/contants.js';
 export type { ProviderPreset } from './ai/contants.js';

@@ -15,6 +15,7 @@
 | `exai share` | Upload to excalidraw.com (e2e encrypted) |
 | `exai checkpoint` | Manage saved diagram states |
 | `exai reference` | Built-in element & color reference |
+| `exai auth` | Manage API keys (`~/.exai/session.json`) |
 | `exai providers` | List available LLM providers |
 | `exai cache` | Manage LLM response cache |
 | `exai init` | Create starter config file |
@@ -376,6 +377,28 @@ exai diagram "auth flow" --provider http://my-server:8080/v1/chat/completions
 | `anthropic` | `claude-sonnet-4-6` | Required |
 | `ollama` | `llama3.2` | Not needed |
 | `lmstudio` | `local-model` | Not needed |
+
+---
+
+## Auth
+
+Manage API keys securely in `~/.exai/session.json` (never committed to git).
+
+```bash
+exai auth set openrouter sk-or-v1-...   # save key
+exai auth set openai sk-...              # multiple providers
+exai auth set groq gsk_...
+exai auth list                           # show stored keys (masked)
+exai auth remove openai                  # remove a key
+exai auth default groq                   # set default provider
+exai auth path                           # show session file path
+```
+
+Key resolution priority:
+1. `--api-key` CLI flag
+2. `EXAI_OPENROUTER_APIKEY` environment variable
+3. `~/.exai/session.json` (per provider)
+4. `exai.config.json` (with migration warning)
 
 ---
 

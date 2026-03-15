@@ -160,10 +160,12 @@ function excalidrawConfigToGlobalStyle(cfg: ExcalidrawStyleConfig): GlobalDiagra
     return result;
 }
 
-function resolveApiKey(optionsApiKey: string | undefined, configApiKey: string | undefined, command: Command): {
-    apiKey?: string;
-    source?: '--api-key' | 'EXAI_OPENROUTER_APIKEY' | 'OPENROUTER_API_KEY' | 'config';
-} {
+function resolveApiKey(
+    optionsApiKey: string | undefined,
+    configApiKey: string | undefined,
+    command: Command,
+    provider?: string,
+): { apiKey?: string; source?: string } {
     // 1) Explicit CLI flag
     const fromCli = command.getOptionValueSource('apiKey') === 'cli' ? optionsApiKey?.trim() : undefined;
     if (fromCli) return { apiKey: fromCli, source: '--api-key' };
@@ -174,14 +176,25 @@ function resolveApiKey(optionsApiKey: string | undefined, configApiKey: string |
     const fromExaiEnv = process.env[EXAI_API_KEY_ENV]?.trim() || envFileKeys.exai?.trim();
     if (fromExaiEnv) return { apiKey: fromExaiEnv, source: EXAI_API_KEY_ENV };
 
-    // Optional backward compatibility
     const fromLegacyEnv =
         process.env[LEGACY_OPENROUTER_API_KEY_ENV]?.trim() || envFileKeys.legacy?.trim();
     if (fromLegacyEnv) return { apiKey: fromLegacyEnv, source: LEGACY_OPENROUTER_API_KEY_ENV };
 
-    // 3) Config file fallback
+    // 3) Session file (~/.exai/session.json)
+    try {
+        const { getKey } = require('./auth/session.js') as typeof import('./auth/session.js');
+        const sessionKey = getKey(provider);
+        if (sessionKey) return { apiKey: sessionKey, source: `~/.exai/session.json (${provider || 'default'})` };
+    } catch {
+        // session module not available — skip
+    }
+
+    // 4) Config file fallback (with warning)
     const fromConfig = configApiKey?.trim();
-    if (fromConfig) return { apiKey: fromConfig, source: 'config' };
+    if (fromConfig && fromConfig !== '<!!>' && !fromConfig.startsWith('<')) {
+        console.warn('Warning: API key in exai.config.json — consider `exai auth set <provider> <key>` instead (stored in ~/.exai/session.json, never committed).');
+        return { apiKey: fromConfig, source: 'config file' };
+    }
 
     return {};
 }
@@ -495,10 +508,10 @@ program
             const { resolveProvider } = await import('./ai/contants.js');
             const provider = resolveProvider(options.provider);
 
-            const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(options.apiKey, config.apiKey, command);
+            const { apiKey: resolvedApiKey, source: apiKeySource } = resolveApiKey(options.apiKey, config.apiKey, command, options.provider);
             if (!resolvedApiKey && provider.authStyle === 'bearer') {
                 console.error('⚠️  Missing API key.');
-                console.error(`Set it via --api-key, ${EXAI_API_KEY_ENV} in .env/env, or config file "apiKey".`);
+                console.error(`Set it via: exai auth set ${options.provider || 'openrouter'} <key>`);
                 process.exitCode = 1;
                 return;
             }
@@ -853,10 +866,11 @@ program
                 }
                 const { resolveProvider: rp } = await import('./ai/contants.js');
                 const prov = rp(options.provider || config.provider);
-                const resolved = resolveApiKey(options.apiKey, config.apiKey, command);
+                const provName = options.provider || config.provider;
+                const resolved = resolveApiKey(options.apiKey, config.apiKey, command, provName);
                 apiKey = resolved.apiKey;
                 if (!apiKey && prov.authStyle === 'bearer') {
-                    console.error('Error: API key required. Set EXAI_OPENROUTER_APIKEY or use --api-key.');
+                    console.error(`Error: API key required. Run: exai auth set ${provName || 'openrouter'} <key>`);
                     process.exit(1);
                 }
             }
@@ -1051,6 +1065,73 @@ program
                 console.log(JSON.stringify(data, null, 2));
             } else {
                 renderReference(section);
+            }
+        } catch (error) {
+            console.error('Error:', error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
+
+/**
+ * Auth command — manage API keys in ~/.exai/session.json
+ */
+program
+    .command('auth')
+    .description('Manage API keys (stored in ~/.exai/session.json)')
+    .argument('<action>', 'Action: set, list, remove, default, path')
+    .argument('[provider]', 'Provider name (for set/remove/default)')
+    .argument('[key]', 'API key (for set)')
+    .action(async (action, provider, key) => {
+        try {
+            const { setKey, removeKey, listKeys, setDefaultProvider, getDefaultProvider, getSessionPath } = await import('./auth/session.js');
+
+            if (action === 'set') {
+                if (!provider || !key) {
+                    console.error('Usage: exai auth set <provider> <key>');
+                    console.error('Example: exai auth set openrouter sk-or-v1-...');
+                    process.exit(1);
+                }
+                setKey(provider, key);
+                console.log(`API key saved for "${provider}" in ~/.exai/session.json`);
+            } else if (action === 'list') {
+                const keys = listKeys();
+                const defaultProv = getDefaultProvider();
+                if (keys.length === 0) {
+                    console.log('\n  No API keys stored.');
+                    console.log('  Run: exai auth set <provider> <key>\n');
+                    return;
+                }
+                console.log('\n  Stored API Keys:\n');
+                for (const { provider: p, keyPreview } of keys) {
+                    const isDefault = p === defaultProv ? ' (default)' : '';
+                    console.log(`  ${p.padEnd(14)} ${keyPreview}${isDefault}`);
+                }
+                console.log();
+            } else if (action === 'remove') {
+                if (!provider) {
+                    console.error('Usage: exai auth remove <provider>');
+                    process.exit(1);
+                }
+                const removed = removeKey(provider);
+                if (removed) {
+                    console.log(`API key removed for "${provider}".`);
+                } else {
+                    console.error(`No key found for "${provider}".`);
+                    process.exit(1);
+                }
+            } else if (action === 'default') {
+                if (!provider) {
+                    const current = getDefaultProvider();
+                    console.log(current ? `Default provider: ${current}` : 'No default provider set.');
+                    return;
+                }
+                setDefaultProvider(provider);
+                console.log(`Default provider set to "${provider}".`);
+            } else if (action === 'path') {
+                console.log(getSessionPath());
+            } else {
+                console.error(`Unknown action "${action}". Use: set, list, remove, default, path`);
+                process.exit(1);
             }
         } catch (error) {
             console.error('Error:', error instanceof Error ? error.message : error);

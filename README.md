@@ -22,7 +22,15 @@ npm install && npm run build
 
 ## Setup
 
-Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys), then:
+Store your API key securely (saved in `~/.exai/session.json`, never committed):
+
+```bash
+exai auth set openrouter sk-or-v1-...
+exai auth set groq gsk_...            # add multiple providers
+exai auth default openrouter          # set default
+```
+
+Or use environment variables:
 
 ```bash
 export EXAI_OPENROUTER_APIKEY="sk-or-v1-..."
@@ -34,11 +42,7 @@ Or use a local provider (no API key needed):
 exai diagram "auth flow" --provider ollama
 ```
 
-Or use a config file:
-
-```bash
-exai init                    # creates exai.config.json with all options
-```
+Key priority: `--api-key` flag > env var > `~/.exai/session.json` > config file
 
 ## Commands
 
@@ -51,6 +55,7 @@ exai init                    # creates exai.config.json with all options
 | `exai share` | Upload to excalidraw.com (e2e encrypted) |
 | `exai checkpoint` | Manage saved diagram states |
 | `exai reference` | Built-in element & color reference |
+| `exai auth` | Manage API keys (`~/.exai/session.json`) |
 | `exai providers` | List available LLM providers |
 | `exai cache` | Manage LLM response cache |
 | `exai init` | Create starter config file |
