@@ -408,6 +408,12 @@ export function resolveBindings(
       theme
     );
 
+    // If arrow has a label, bind text to arrow
+    if (arr.label) {
+      const labelId = `${arrowId}-label`;
+      arrowEl.boundElements = [{ type: 'text' as const, id: labelId }];
+    }
+
     arrowElements.push(arrowEl);
 
     // Add arrow to source/target boundElements
@@ -442,7 +448,7 @@ export function resolveBindings(
             fontFamily: 1,
             textAlign: 'center',
             verticalAlign: 'middle',
-            containerId: null,
+            containerId: arrowId,
             originalText: arr.label,
             lineHeight: LINE_HEIGHT,
             baseline: Math.round(ARROW_LABEL_FONT_SIZE * LINE_HEIGHT),
@@ -451,7 +457,6 @@ export function resolveBindings(
         )
       );
 
-      // Store label → arrow mapping for layout positioning
       labelMap.set(arrowId, labelId);
     }
   }
