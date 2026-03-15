@@ -1080,20 +1080,35 @@ program
   .argument('<file>', 'Path to .excalidraw file')
   .option('-f, --format <format>', 'Output format: png or svg', 'png')
   .option('-o, --output <file>', 'Output file path')
+  .option('--renderer <type>', 'Renderer: static (default) or live (uses Excalidraw canvas)', 'static')
+  .option('--verbose', 'Show export details')
   .action(async (file, options) => {
     try {
-      const { exportExcalidraw } = await import('./export/render.js');
       const inputPath = resolve(file);
       const format = (options.format === 'svg' ? 'svg' : 'png') as 'png' | 'svg';
+      const renderer = options.renderer === 'live' ? 'live' : 'static';
 
       console.log(`\n◆ Excalidraw Export`);
       console.log(`  Input: ${inputPath}`);
       console.log(`  Format: ${format}`);
+      console.log(`  Renderer: ${renderer}`);
 
-      const outputPath = await exportExcalidraw(inputPath, {
-        format,
-        output: options.output ? resolve(options.output) : undefined,
-      });
+      let outputPath: string;
+
+      if (renderer === 'live') {
+        const { liveExport } = await import('./export/live-render.js');
+        outputPath = await liveExport(inputPath, {
+          format,
+          output: options.output ? resolve(options.output) : undefined,
+          verbose: options.verbose,
+        });
+      } else {
+        const { exportExcalidraw } = await import('./export/render.js');
+        outputPath = await exportExcalidraw(inputPath, {
+          format,
+          output: options.output ? resolve(options.output) : undefined,
+        });
+      }
 
       console.log(`  ✓ Exported: ${outputPath}\n`);
     } catch (error) {

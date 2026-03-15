@@ -33,7 +33,7 @@ const DEFAULT_SHAPE_HEIGHT = 100;
 const DEFAULT_DIAMOND_WIDTH = 200;
 const DEFAULT_DIAMOND_HEIGHT = 120;
 const DEFAULT_FONT_SIZE = 16;
-const ARROW_LABEL_FONT_SIZE = 13;
+const ARROW_LABEL_FONT_SIZE = 16;
 const LINE_HEIGHT = 1.25;
 const CHAR_WIDTH_ESTIMATE = 8; // approximate px per character at fontSize 16
 
