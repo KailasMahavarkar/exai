@@ -796,5 +796,120 @@ program
         }
     });
 
+/**
+ * Diagram command — generate .excalidraw diagrams from AI or JSON
+ */
+program
+    .command('diagram')
+    .description('Generate an Excalidraw diagram from a prompt or JSON')
+    .argument('[prompt]', 'Diagram description (AI mode)')
+    .option('-o, --output <file>', 'Output file path', 'diagram.excalidraw')
+    .option('-d, --direction <dir>', 'Layout direction: TB or LR', 'TB')
+    .option('--style <style>', 'Visual style: hand-drawn or clean', 'hand-drawn')
+    .option('--model <model>', 'LLM model to use')
+    .option('--json <file>', 'JSON file with simplified elements (deterministic mode)')
+    .option('--stdin', 'Read element JSON from stdin')
+    .option('--api-key <key>', 'OpenRouter API key')
+    .option('--no-cache', 'Disable response cache')
+    .option('--verbose', 'Show per-step timing')
+    .option('--config-path <path>', 'Path to config file')
+    .action(async (prompt, options, command) => {
+        try {
+            // Load config
+            let config: CliConfig = {};
+            if (options.configPath) {
+                config = loadConfig(options.configPath);
+            } else if (existsSync('exai.config.json')) {
+                config = loadConfig('exai.config.json');
+            }
+
+            const { runDiagramPipeline } = await import('./diagram/pipeline.js');
+            const isVerbose = options.verbose || config.verbose || false;
+
+            // Resolve API key for AI mode
+            let apiKey: string | undefined;
+            if (!options.json && !options.stdin) {
+                if (!prompt) {
+                    console.error('Error: prompt is required in AI mode. Use --json or --stdin for deterministic mode.');
+                    process.exit(1);
+                }
+                const resolved = resolveApiKey(options.apiKey, config.apiKey, command);
+                apiKey = resolved.apiKey;
+                if (!apiKey) {
+                    console.error('Error: API key required. Set EXAI_OPENROUTER_APIKEY or use --api-key.');
+                    process.exit(1);
+                }
+            }
+
+            const direction = (options.direction === 'LR' ? 'LR' : 'TB') as 'TB' | 'LR';
+            const style = (options.style === 'clean' ? 'clean' : 'hand-drawn') as 'hand-drawn' | 'clean';
+            const output = resolve(options.output);
+
+            console.log(`\n◆ Diagram Generator`);
+            console.log(`  Input: ${options.json || options.stdin ? (options.json || 'stdin') : 'AI'}`);
+            console.log(`  Direction: ${direction}  Style: ${style}`);
+            console.log(`  Output: ${output}\n`);
+
+            const result = await runDiagramPipeline({
+                prompt: prompt || '',
+                direction,
+                style,
+                output,
+                model: options.model || config.model,
+                apiKey,
+                verbose: isVerbose,
+                useCache: options.cache !== false && config.cache !== false,
+                timeoutMs: (config.timeoutSecs ?? 120) * 1000,
+                jsonInput: options.json,
+                stdin: options.stdin,
+            }, isVerbose ? (step) => console.log(`  ${step}`) : undefined);
+
+            console.log('━'.repeat(40));
+            console.log(`  ✓ Diagram saved: ${result.outputPath}`);
+            console.log(`  Elements: ${result.elementCount}  Time: ${(result.totalMs / 1000).toFixed(1)}s`);
+            if (isVerbose) {
+                console.log('  Timing:');
+                for (const t of result.timing) {
+                    console.log(`    ${t.label.padEnd(12)} ${t.ms}ms`);
+                }
+            }
+            console.log('━'.repeat(40));
+        } catch (error) {
+            console.error('Error:', error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
+
+/**
+ * Export command — convert .excalidraw to PNG or SVG
+ */
+program
+    .command('export')
+    .description('Export an .excalidraw file to PNG or SVG')
+    .argument('<file>', 'Path to .excalidraw file')
+    .option('-f, --format <format>', 'Output format: png or svg', 'png')
+    .option('-o, --output <file>', 'Output file path')
+    .action(async (file, options) => {
+        try {
+            const { exportExcalidraw } = await import('./export/render.js');
+            const inputPath = resolve(file);
+            const format = (options.format === 'svg' ? 'svg' : 'png') as 'png' | 'svg';
+
+            console.log(`\n◆ Excalidraw Export`);
+            console.log(`  Input: ${inputPath}`);
+            console.log(`  Format: ${format}`);
+
+            const outputPath = await exportExcalidraw(inputPath, {
+                format,
+                output: options.output ? resolve(options.output) : undefined,
+            });
+
+            console.log(`  ✓ Exported: ${outputPath}\n`);
+        } catch (error) {
+            console.error('Error:', error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
+
 // Parse arguments and run
 program.parse();

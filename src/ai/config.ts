@@ -17,6 +17,13 @@ import { resolve, dirname, isAbsolute } from 'path';
 
 // ── Nested option types ─────────────────────────────────────────────────────
 
+export interface DiagramConfig {
+    /** Layout direction: TB (top-to-bottom) or LR (left-to-right) */
+    direction?: 'TB' | 'LR';
+    /** Visual style: hand-drawn or clean */
+    style?: 'hand-drawn' | 'clean';
+}
+
 export interface ExcalidrawStyleConfig {
     strokeWidth?: 1 | 2 | 4;
     fillStyle?: 'hachure' | 'cross-hatch' | 'solid' | 'dots' | 'dashed' | 'zigzag' | 'none';
@@ -81,6 +88,9 @@ export interface CliConfig {
 
     // Excalidraw visual style
     excalidraw?: ExcalidrawStyleConfig;
+
+    // Diagram pipeline settings
+    diagram?: DiagramConfig;
 }
 
 // ── Validation helpers ──────────────────────────────────────────────────────
@@ -100,6 +110,8 @@ const KNOWN_KEYS = new Set<string>([
     'verbose', 'timeoutSecs',
     // Excalidraw visual style
     'excalidraw',
+    // Diagram pipeline settings
+    'diagram',
 ]);
 
 const COMPRESS_OPTION_KEYS = new Set<string>([
@@ -306,6 +318,26 @@ export function loadConfig(configPath: string): CliConfig {
 
     // Excalidraw visual style
     if (obj.excalidraw !== undefined) config.excalidraw = parseExcalidrawStyleConfig(obj.excalidraw);
+
+    // Diagram pipeline settings
+    if (obj.diagram !== undefined) {
+        if (typeof obj.diagram !== 'object' || obj.diagram === null || Array.isArray(obj.diagram)) {
+            throw new Error('Config "diagram" must be an object');
+        }
+        const d = obj.diagram as Record<string, unknown>;
+        const diagramConfig: DiagramConfig = {};
+        if (d.direction !== undefined) {
+            const v = assertString(d, 'direction');
+            if (v === 'TB' || v === 'LR') diagramConfig.direction = v;
+            else console.warn(`Warning: diagram.direction "${v}" is not valid. Use 'TB' or 'LR'`);
+        }
+        if (d.style !== undefined) {
+            const v = assertString(d, 'style');
+            if (v === 'hand-drawn' || v === 'clean') diagramConfig.style = v;
+            else console.warn(`Warning: diagram.style "${v}" is not valid. Use 'hand-drawn' or 'clean'`);
+        }
+        config.diagram = diagramConfig;
+    }
 
     return config;
 }
