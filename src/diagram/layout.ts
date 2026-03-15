@@ -328,15 +328,29 @@ export function layoutElements(
     arrowEl.width = Math.max(Math.abs(dx), 1);
     arrowEl.height = Math.max(Math.abs(dy), 1);
 
-    // Position arrow label at midpoint for static export rendering.
-    // containerId binding handles live Excalidraw positioning,
-    // but @excalidraw/utils needs explicit x/y for PNG/SVG export.
+    // Position arrow label at arrow midpoint (matches Excalidraw's getBoundTextElementPosition).
+    // For 2-point arrows: midpoint = arrow.x + points[1][0]/2, arrow.y + points[1][1]/2
+    // Then center text: subtract textWidth/2 and textHeight/2
     const labelId = labelMap.get(arrowEl.id);
     if (labelId) {
       const labelEl = arrowElements.find((e) => e.id === labelId);
       if (labelEl) {
-        const midX = startPt.x + dx / 2;
-        const midY = startPt.y + dy / 2;
+        const pts = arrowEl.points as number[][];
+        const midIdx = Math.floor(pts.length / 2);
+        let midX: number, midY: number;
+
+        if (pts.length % 2 === 1) {
+          // Odd points: use center point
+          midX = arrowEl.x + pts[midIdx][0];
+          midY = arrowEl.y + pts[midIdx][1];
+        } else {
+          // Even points (our default 2-point): midpoint of center segment
+          const p1 = pts[midIdx - 1];
+          const p2 = pts[midIdx];
+          midX = arrowEl.x + (p1[0] + p2[0]) / 2;
+          midY = arrowEl.y + (p1[1] + p2[1]) / 2;
+        }
+
         labelEl.x = midX - (labelEl.width ?? 40) / 2;
         labelEl.y = midY - (labelEl.height ?? 16) / 2;
       }

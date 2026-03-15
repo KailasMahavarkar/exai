@@ -523,6 +523,7 @@ export function resolveBindings(
             verticalAlign: 'middle',
             containerId: arrowId,
             originalText: arr.label,
+            autoResize: true,
             lineHeight: LINE_HEIGHT,
             baseline: Math.round(ARROW_LABEL_FONT_SIZE * LINE_HEIGHT),
           },

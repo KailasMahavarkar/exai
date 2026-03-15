@@ -181,6 +181,7 @@ export interface ExcalidrawElement {
   verticalAlign?: string;
   containerId?: string | null;
   originalText?: string;
+  autoResize?: boolean;
   lineHeight?: number;
   baseline?: number;
 
