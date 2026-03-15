@@ -100,7 +100,7 @@ export interface CliConfig {
 
 const KNOWN_KEYS = new Set<string>([
     // AI / LLM
-    'model', 'filterModel', 'temperature', 'provider',
+    'model', 'filterModel', 'apiKey', 'temperature', 'provider',
     // Output
     'format', 'output', 'direction', 'spacing',
     // Context
@@ -285,9 +285,6 @@ export function loadConfig(configPath: string): CliConfig {
     if (obj.model !== undefined) config.model = assertString(obj, 'model');
     if (obj.filterModel !== undefined) config.filterModel = assertString(obj, 'filterModel');
     if (obj.temperature !== undefined) config.temperature = assertNumber(obj, 'temperature');
-    if (obj.apiKey !== undefined) {
-        console.warn('Warning: "apiKey" in config file is no longer supported. Use `exai auth set <provider> <key>` instead.');
-    }
     if (obj.provider !== undefined) config.provider = assertString(obj, 'provider');
 
     // Output
