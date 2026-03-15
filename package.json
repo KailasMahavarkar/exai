@@ -48,6 +48,7 @@
     "elkjs": "^0.9.3",
     "genctx": "^0.2.3",
     "nanoid": "^5.0.9",
+    "puppeteer": "^24.39.1",
     "ts-graphviz": "^3.0.6",
     "web-worker": "^1.5.0"
   },

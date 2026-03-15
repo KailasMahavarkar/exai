@@ -48,6 +48,22 @@ export { createNode, createArrow, createText } from './factory/index.js';
 export { DEFAULT_LAYOUT_OPTIONS } from './types/dsl.js';
 export { DEFAULT_APP_STATE, DEFAULT_ELEMENT_STYLE } from './types/excalidraw.js';
 
+// Diagram pipeline exports
+export { runDiagramPipeline } from './diagram/pipeline.js';
+export type {
+  DiagramPipelineConfig,
+  DiagramPipelineResult,
+  SimplifiedElement,
+  ExcalidrawFile as DiagramExcalidrawFile,
+} from './diagram/types.js';
+
+// Export (excalidraw → PNG/SVG)
+export { exportExcalidraw } from './export/render.js';
+
+// Config exports
+export { loadConfig, CONFIG_TEMPLATE } from './ai/config.js';
+export type { CliConfig, DiagramConfig } from './ai/config.js';
+
 /**
  * High-level API: Create an Excalidraw flowchart from DSL string
  */

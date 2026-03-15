@@ -87,11 +87,21 @@ All fields optional. CLI flags override config values.
 ## Commands
 
 ```bash
-# AI generation
+# AI generation (flowchart from codebase)
 exai ai "<prompt>" [options]
 
 # Create from DSL/JSON/DOT
 exai create [input] [options]
+
+# Generate diagram (AI mode)
+exai diagram "pipeline flow with scanner, processor, output"
+
+# Generate diagram from JSON (deterministic, no AI)
+exai diagram --json elements.json -o my-diagram.excalidraw
+
+# Export .excalidraw to PNG or SVG
+exai export diagram.excalidraw --format png
+exai export diagram.excalidraw --format svg -o output.svg
 
 # Parse without generating
 exai parse <input>
@@ -134,6 +144,67 @@ Common style tokens:
 - Node: `bg:#hex`, `stroke:#hex`, `size:18`, `font:2|virgil|helvetica|cascadia|excalifont`, `text:#hex`
 - Edge: `color:#hex`, `width:3`, `arrow:arrow|bar|dot|triangle|null`, `start:...`, `dashed|dotted|solid`
 - Group: `stroke:#hex`, `bg:#hex`, `padding:24`, `dashed|solid|dotted`
+
+## Diagram Generation
+
+Generate `.excalidraw` diagrams from natural language or structured JSON.
+
+### AI Mode
+
+Describe your diagram and the LLM outputs simplified element JSON. The CLI handles layout, styling, arrow bindings, and file assembly.
+
+```bash
+exai diagram "ComfyUI pipeline with Gap Scanner, Prompt Generator, KSampler, VAE Decode, Save As"
+exai diagram "microservice architecture" --direction LR --style clean
+```
+
+### Deterministic Mode (No AI)
+
+Pass a JSON file with simplified elements. Same processing pipeline, no LLM needed.
+
+```bash
+exai diagram --json elements.json -o my-diagram.excalidraw
+cat elements.json | exai diagram --stdin
+```
+
+**Simplified element format:**
+
+```json
+[
+  { "type": "rectangle", "id": "api", "label": "API Gateway", "backgroundColor": "#a5d8ff" },
+  { "type": "rectangle", "id": "auth", "label": "Auth Service", "backgroundColor": "#d0bfff" },
+  { "type": "arrow", "from": "api", "to": "auth", "label": "JWT" }
+]
+```
+
+No coordinates, no text elements, no roughness — the CLI expands labels into shape + bound text pairs, applies style presets, resolves arrow bindings, and auto-layouts using topological sort.
+
+**Flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `-o, --output` | `diagram.excalidraw` | Output file path |
+| `-d, --direction` | `TB` | Layout direction: `TB` (top-bottom) or `LR` (left-right) |
+| `--style` | `hand-drawn` | Visual style: `hand-drawn` or `clean` |
+| `--json` | — | Path to JSON file with simplified elements |
+| `--stdin` | — | Read element JSON from stdin |
+| `--model` | config default | LLM model for AI mode |
+| `--no-cache` | — | Disable response cache |
+| `--verbose` | — | Show per-step timing |
+
+## Export
+
+Convert `.excalidraw` files to PNG or SVG using Puppeteer and `@excalidraw/utils`.
+
+```bash
+exai export diagram.excalidraw --format png
+exai export diagram.excalidraw --format svg -o output.svg
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `-f, --format` | `png` | Output format: `png` or `svg` |
+| `-o, --output` | — | Output path (defaults to input name with new extension) |
 
 ## License
 
