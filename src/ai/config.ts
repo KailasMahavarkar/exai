@@ -22,6 +22,8 @@ export interface DiagramConfig {
     direction?: 'TB' | 'LR';
     /** Visual style: hand-drawn or clean */
     style?: 'hand-drawn' | 'clean';
+    /** Color theme: light or dark */
+    theme?: 'light' | 'dark';
 }
 
 export interface ExcalidrawStyleConfig {
@@ -335,6 +337,11 @@ export function loadConfig(configPath: string): CliConfig {
             const v = assertString(d, 'style');
             if (v === 'hand-drawn' || v === 'clean') diagramConfig.style = v;
             else console.warn(`Warning: diagram.style "${v}" is not valid. Use 'hand-drawn' or 'clean'`);
+        }
+        if (d.theme !== undefined) {
+            const v = assertString(d, 'theme');
+            if (v === 'light' || v === 'dark') diagramConfig.theme = v;
+            else console.warn(`Warning: diagram.theme "${v}" is not valid. Use 'light' or 'dark'`);
         }
         config.diagram = diagramConfig;
     }

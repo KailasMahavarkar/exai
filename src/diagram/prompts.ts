@@ -2,12 +2,14 @@
  * System prompt for diagram generation via LLM.
  *
  * Instructs the LLM to output a simplified JSON array:
- *   - Shapes with label strings (no separate text elements)
+ *   - Shapes with label strings or rich label objects
  *   - Arrows with from/to IDs (no coordinates)
- *   - Optional colors and groups
+ *   - Optional colors, groups, and pseudo-elements
  *
  * The CLI handles all layout, text expansion, styling, and arrow routing.
  */
+
+import type { DiagramTheme } from './types.js';
 
 export const DIAGRAM_SYSTEM_PROMPT = `You are a diagram architect. Given a description, output a JSON array of elements representing the diagram.
 
@@ -28,12 +30,26 @@ export const DIAGRAM_SYSTEM_PROMPT = `You are a diagram architect. Given a descr
 - "ellipse" — users, external systems, start/end
 - "diamond" — decision points, routers
 
+## Labels
+
+Labels can be a string or an object for fine control:
+- String: "My Label"
+- Object: { "text": "My Label", "fontSize": 20, "fontFamily": 2, "strokeColor": "#c92a2a" }
+  - fontSize: pixel size (default 16)
+  - fontFamily: 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code)
+  - strokeColor: hex text color
+
 ## Optional properties
 
 - backgroundColor: hex color (e.g. "#a5d8ff" for blue, "#b2f2bb" for green, "#ffc9c9" for red, "#d0bfff" for purple, "#e9ecef" for gray)
 - strokeColor: hex border color
 - strokeStyle: "dashed" for optional connections
 - group: string label to visually group related shapes
+
+## Pseudo-elements (optional)
+
+- { "type": "cameraUpdate", "zoom": 0.8 } — override viewport zoom (0.1-2.0)
+- { "type": "delete", "targetId": "some-id" } — remove an element by ID
 
 ## Example
 
@@ -53,6 +69,18 @@ Output:
   { "type": "arrow", "from": "users", "to": "db" }
 ]`;
 
-export function buildUserPrompt(prompt: string, direction: string): string {
-    return `Create a diagram for: ${prompt}\n\nLayout direction: ${direction} (${direction === 'TB' ? 'top-to-bottom' : 'left-to-right'})`;
+const DARK_MODE_GUIDANCE = `
+
+## Dark Mode
+
+This diagram uses a dark background (#121212). Use dark-mode friendly colors:
+- Element fills: "#2d3436", "#34495e", "#2c3e50", "#1e272e"
+- Accent fills: "#74b9ff", "#a29bfe", "#81ecec", "#fab1a0", "#ffeaa7", "#55efc4"
+- Borders/strokes: "#dfe6e9", "#b2bec3"
+- Avoid pure white backgrounds — use muted/dark tones.`;
+
+export function buildUserPrompt(prompt: string, direction: string, theme?: DiagramTheme): string {
+    const directionHint = `Layout direction: ${direction} (${direction === 'TB' ? 'top-to-bottom' : 'left-to-right'})`;
+    const themeHint = theme === 'dark' ? DARK_MODE_GUIDANCE : '';
+    return `Create a diagram for: ${prompt}\n\n${directionHint}${themeHint}`;
 }

@@ -10,6 +10,7 @@ import type {
     ExcalidrawElement,
     SimplifiedArrow,
     DiagramDirection,
+    ViewportOverrides,
 } from './types.js';
 
 // ── Constants ──
@@ -89,12 +90,15 @@ function topoSort(shapeIds: string[], arrows: SimplifiedArrow[]): LayoutNode[] {
 /**
  * Assign x/y positions to all shapes and their bound text elements.
  * Returns the positioned elements + arrow point computation.
+ *
+ * @param labelMap — maps arrowId to its label text element ID (replaces _labelId hack)
  */
 export function layoutElements(
     shapes: ExcalidrawElement[],
     arrowElements: ExcalidrawElement[],
     rawArrows: SimplifiedArrow[],
     direction: DiagramDirection,
+    labelMap: Map<string, string>,
 ): ExcalidrawElement[] {
     // Build maps
     const shapeMap = new Map<string, ExcalidrawElement>();
@@ -187,16 +191,14 @@ export function layoutElements(
         arrowEl.width = Math.max(Math.abs(dx), 1);
         arrowEl.height = Math.max(Math.abs(dy), 1);
 
-        // Position arrow label at midpoint
-        const labelId = (arrowEl as unknown as Record<string, unknown>)['_labelId'] as string | undefined;
+        // Position arrow label at midpoint (using labelMap instead of _labelId hack)
+        const labelId = labelMap.get(arrowEl.id);
         if (labelId) {
             const labelEl = arrowElements.find(e => e.id === labelId);
             if (labelEl) {
                 labelEl.x = srcPoint.x + dx / 2 - (labelEl.width ?? 40) / 2;
                 labelEl.y = srcPoint.y + dy / 2 - (labelEl.height ?? 16) / 2;
             }
-            // Clean up internal property
-            delete (arrowEl as unknown as Record<string, unknown>)['_labelId'];
         }
     }
 
@@ -219,8 +221,12 @@ function getEdgePoint(
 
 /**
  * Compute viewport (scroll + zoom) to frame all elements with padding.
+ * Accepts optional overrides from cameraUpdate pseudo-elements.
  */
-export function computeViewport(elements: ExcalidrawElement[]): {
+export function computeViewport(
+    elements: ExcalidrawElement[],
+    overrides?: ViewportOverrides,
+): {
     scrollX: number;
     scrollY: number;
     zoom: number;
@@ -246,15 +252,17 @@ export function computeViewport(elements: ExcalidrawElement[]): {
     const vpWidth = 1280;
     const vpHeight = 960;
 
-    const zoom = Math.min(
+    const autoZoom = Math.min(
         vpWidth / contentWidth,
         vpHeight / contentHeight,
         2.0,
     );
 
+    const zoom = overrides?.zoom ?? Math.max(0.1, Math.min(autoZoom, 2.0));
+
     return {
-        scrollX: -(minX - PADDING) + (vpWidth / zoom - contentWidth) / 2,
-        scrollY: -(minY - PADDING) + (vpHeight / zoom - contentHeight) / 2,
-        zoom: Math.max(0.1, Math.min(zoom, 2.0)),
+        scrollX: overrides?.scrollX ?? (-(minX - PADDING) + (vpWidth / zoom - contentWidth) / 2),
+        scrollY: overrides?.scrollY ?? (-(minY - PADDING) + (vpHeight / zoom - contentHeight) / 2),
+        zoom,
     };
 }

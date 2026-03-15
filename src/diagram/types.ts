@@ -4,14 +4,69 @@
  * Two-tier format:
  *   SimplifiedElement — what the LLM outputs / what --json accepts (label shorthand, from/to arrows)
  *   ExcalidrawElement — full Excalidraw element with all required properties
+ *
+ * Also includes pseudo-elements (cameraUpdate, delete, restoreCheckpoint)
+ * that control pipeline behavior but are not written to the output file.
  */
+
+// ── Rich label ──
+
+export interface RichLabel {
+    text: string;
+    fontSize?: number;
+    /** 1=Virgil (hand), 2=Helvetica, 3=Cascadia (code), 5=Excalifont */
+    fontFamily?: number;
+    strokeColor?: string;
+}
+
+export type LabelValue = string | RichLabel;
+
+/** Normalize string or object label into RichLabel */
+export function normalizeLabel(label: LabelValue): RichLabel {
+    if (typeof label === 'string') {
+        return { text: label };
+    }
+    return {
+        ...label,
+        fontSize: label.fontSize && label.fontSize > 0 ? label.fontSize : undefined,
+    };
+}
+
+// ── Theme ──
+
+export type DiagramTheme = 'light' | 'dark';
+
+export interface ThemeColors {
+    viewBackgroundColor: string;
+    defaultStrokeColor: string;
+    defaultTextColor: string;
+    defaultArrowColor: string;
+    arrowLabelBackground: string;
+}
+
+export const THEME_PRESETS: Record<DiagramTheme, ThemeColors> = {
+    light: {
+        viewBackgroundColor: '#ffffff',
+        defaultStrokeColor: '#1e1e1e',
+        defaultTextColor: '#1e1e1e',
+        defaultArrowColor: '#495057',
+        arrowLabelBackground: '#ffffff',
+    },
+    dark: {
+        viewBackgroundColor: '#121212',
+        defaultStrokeColor: '#e0e0e0',
+        defaultTextColor: '#e0e0e0',
+        defaultArrowColor: '#adb5bd',
+        arrowLabelBackground: '#1e1e1e',
+    },
+};
 
 // ── Simplified input format ──
 
 export interface SimplifiedShape {
     type: 'rectangle' | 'ellipse' | 'diamond';
     id: string;
-    label: string;
+    label: LabelValue;
     backgroundColor?: string;
     strokeColor?: string;
     width?: number;
@@ -32,6 +87,30 @@ export interface SimplifiedArrow {
 }
 
 export type SimplifiedElement = SimplifiedShape | SimplifiedArrow;
+
+// ── Pseudo-elements ──
+
+export interface CameraUpdatePseudo {
+    type: 'cameraUpdate';
+    scrollX?: number;
+    scrollY?: number;
+    zoom?: number;
+}
+
+export interface DeletePseudo {
+    type: 'delete';
+    targetId: string;
+}
+
+export interface RestoreCheckpointPseudo {
+    type: 'restoreCheckpoint';
+    name: string;
+}
+
+export type PseudoElement = CameraUpdatePseudo | DeletePseudo | RestoreCheckpointPseudo;
+
+/** Union of all possible elements in the input JSON array */
+export type DiagramInputElement = SimplifiedElement | PseudoElement;
 
 // ── Full Excalidraw element format ──
 
@@ -136,6 +215,14 @@ export const STYLE_PRESETS: Record<DiagramStyle, StylePresetValues> = {
     },
 };
 
+// ── Viewport overrides ──
+
+export interface ViewportOverrides {
+    scrollX?: number;
+    scrollY?: number;
+    zoom?: number;
+}
+
 // ── Pipeline config / result ──
 
 export interface DiagramPipelineConfig {
@@ -143,6 +230,7 @@ export interface DiagramPipelineConfig {
     direction: DiagramDirection;
     style: DiagramStyle;
     output: string;
+    theme?: DiagramTheme;
 
     // LLM settings (reused from exai infra)
     model?: string;
@@ -154,6 +242,10 @@ export interface DiagramPipelineConfig {
     // Deterministic mode (skip LLM)
     jsonInput?: string;   // file path or raw JSON string
     stdin?: boolean;
+
+    // Checkpoint
+    checkpoint?: string;
+    fromCheckpoint?: string;
 }
 
 export interface DiagramTimingEntry {

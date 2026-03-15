@@ -3,23 +3,24 @@
  *
  * Steps:
  *   1. Get input (LLM call or file/stdin)
- *   2. Parse simplified elements
- *   3. Expand labels → shape + bound text
- *   4. Apply style defaults
- *   5. Resolve arrow bindings
- *   6. Auto-layout positions
- *   7. Build .excalidraw file
- *   8. Write output
+ *   2. Parse all elements (including pseudo-elements)
+ *   3. Extract pseudo-elements (camera, delete, checkpoint)
+ *   4. Expand labels → shape + bound text
+ *   5. Apply style defaults
+ *   6. Resolve arrow bindings
+ *   7. Auto-layout positions
+ *   8. Build .excalidraw file
+ *   9. Write output
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { callLLM } from '../ai/openrouter.js';
-import { parseElements, expandLabels, applyDefaults, resolveBindings } from './elements.js';
+import { parseElements, extractPseudoElements, expandLabels, applyDefaults, resolveBindings } from './elements.js';
 import { layoutElements, computeViewport } from './layout.js';
 import { buildExcalidrawFile } from './build-file.js';
 import { DIAGRAM_SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
-import type { DiagramPipelineConfig, DiagramPipelineResult, DiagramTimingEntry } from './types.js';
+import type { DiagramPipelineConfig, DiagramPipelineResult, DiagramTimingEntry, DiagramTheme } from './types.js';
 
 export async function runDiagramPipeline(
     config: DiagramPipelineConfig,
@@ -27,6 +28,7 @@ export async function runDiagramPipeline(
 ): Promise<DiagramPipelineResult> {
     const timing: DiagramTimingEntry[] = [];
     const totalStart = Date.now();
+    const theme: DiagramTheme = config.theme ?? 'light';
 
     function time<T>(label: string, fn: () => T): T {
         const start = Date.now();
@@ -48,14 +50,8 @@ export async function runDiagramPipeline(
     if (config.stdin) {
         onProgress?.('Reading from stdin...');
         rawInput = time('Read stdin', () => {
-            const chunks: Buffer[] = [];
-            const fd = 0; // stdin
-            const buf = Buffer.alloc(1024);
-            let n: number;
             try {
-                const { readFileSync } = require('fs');
-                rawInput = readFileSync(fd, 'utf-8');
-                return rawInput;
+                return readFileSync(0, 'utf-8');
             } catch {
                 return '';
             }
@@ -72,7 +68,7 @@ export async function runDiagramPipeline(
     } else {
         // LLM mode
         onProgress?.('Generating diagram via LLM...');
-        const userPrompt = buildUserPrompt(config.prompt, config.direction);
+        const userPrompt = buildUserPrompt(config.prompt, config.direction, theme);
 
         rawInput = await timeAsync('LLM call', () =>
             callLLM(userPrompt, DIAGRAM_SYSTEM_PROMPT, {
@@ -88,30 +84,41 @@ export async function runDiagramPipeline(
         );
     }
 
-    // Step 2: Parse
+    // Step 2: Parse all elements
     onProgress?.('Parsing elements...');
-    const simplified = time('Parse', () => parseElements(rawInput));
+    const allInput = time('Parse', () => parseElements(rawInput));
 
-    // Step 3: Expand labels
+    // Step 3: Extract pseudo-elements
+    const { elements: simplified, viewportOverrides } = time('Pseudos', () =>
+        extractPseudoElements(allInput)
+    );
+
+    // Step 4: Expand labels
     onProgress?.('Expanding labels...');
-    const { excalidraw: shapes, arrows: rawArrows } = time('Expand', () => expandLabels(simplified));
+    const { excalidraw: shapes, arrows: rawArrows } = time('Expand', () =>
+        expandLabels(simplified, theme)
+    );
 
-    // Step 4: Apply defaults
+    // Step 5: Apply defaults
     const styled = time('Style', () => applyDefaults(shapes, config.style));
 
-    // Step 5: Resolve bindings
+    // Step 6: Resolve bindings
     onProgress?.('Resolving connections...');
-    const arrowElements = time('Bindings', () => resolveBindings(styled, rawArrows, config.direction));
+    const { arrowElements, labelMap } = time('Bindings', () =>
+        resolveBindings(styled, rawArrows, config.direction, theme)
+    );
 
-    // Step 6: Layout
+    // Step 7: Layout
     onProgress?.('Computing layout...');
-    const positioned = time('Layout', () => layoutElements(styled, arrowElements, rawArrows, config.direction));
+    const positioned = time('Layout', () =>
+        layoutElements(styled, arrowElements, rawArrows, config.direction, labelMap)
+    );
 
-    // Step 7: Build file
-    const viewport = computeViewport(positioned);
-    const file = buildExcalidrawFile(positioned, viewport);
+    // Step 8: Build file
+    const viewport = computeViewport(positioned, viewportOverrides);
+    const file = buildExcalidrawFile(positioned, viewport, theme);
 
-    // Step 8: Write
+    // Step 9: Write
     onProgress?.('Writing output...');
     const outputJson = JSON.stringify(file, null, 2);
     mkdirSync(dirname(config.output), { recursive: true });

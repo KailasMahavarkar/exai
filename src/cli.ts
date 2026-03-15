@@ -806,6 +806,7 @@ program
     .option('-o, --output <file>', 'Output file path', 'diagram.excalidraw')
     .option('-d, --direction <dir>', 'Layout direction: TB or LR', 'TB')
     .option('--style <style>', 'Visual style: hand-drawn or clean', 'hand-drawn')
+    .option('--theme <theme>', 'Color theme: light or dark', 'light')
     .option('--model <model>', 'LLM model to use')
     .option('--json <file>', 'JSON file with simplified elements (deterministic mode)')
     .option('--stdin', 'Read element JSON from stdin')
@@ -826,6 +827,14 @@ program
             const { runDiagramPipeline } = await import('./diagram/pipeline.js');
             const isVerbose = options.verbose || config.verbose || false;
 
+            // Apply diagram config defaults (CLI flags take priority)
+            if (config.diagram) {
+                const src = (name: string) => command.getOptionValueSource(name);
+                if (config.diagram.direction && src('direction') !== 'cli') options.direction = config.diagram.direction;
+                if (config.diagram.style && src('style') !== 'cli') options.style = config.diagram.style;
+                if (config.diagram.theme && src('theme') !== 'cli') options.theme = config.diagram.theme;
+            }
+
             // Resolve API key for AI mode
             let apiKey: string | undefined;
             if (!options.json && !options.stdin) {
@@ -843,17 +852,19 @@ program
 
             const direction = (options.direction === 'LR' ? 'LR' : 'TB') as 'TB' | 'LR';
             const style = (options.style === 'clean' ? 'clean' : 'hand-drawn') as 'hand-drawn' | 'clean';
+            const theme = (options.theme === 'dark' ? 'dark' : 'light') as 'light' | 'dark';
             const output = resolve(options.output);
 
             console.log(`\n◆ Diagram Generator`);
             console.log(`  Input: ${options.json || options.stdin ? (options.json || 'stdin') : 'AI'}`);
-            console.log(`  Direction: ${direction}  Style: ${style}`);
+            console.log(`  Direction: ${direction}  Style: ${style}  Theme: ${theme}`);
             console.log(`  Output: ${output}\n`);
 
             const result = await runDiagramPipeline({
                 prompt: prompt || '',
                 direction,
                 style,
+                theme,
                 output,
                 model: options.model || config.model,
                 apiKey,
