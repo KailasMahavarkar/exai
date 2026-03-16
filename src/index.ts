@@ -8,7 +8,8 @@
 export { runDiagramPipeline } from './diagram/pipeline.js';
 export { compileToD2 } from './diagram/compiler.js';
 export { renderD2, checkD2Installed } from './diagram/render.js';
-export { D2_THEMES, resolveTheme } from './diagram/themes.js';
+export { D2_THEMES, resolveTheme, COLOR_PRESETS, resolvePreset } from './diagram/themes.js';
+export type { ColorPreset } from './diagram/themes.js';
 export type {
   SimplifiedShape,
   SimplifiedArrow,

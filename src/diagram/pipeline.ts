@@ -13,7 +13,7 @@ import { dirname, resolve } from 'path';
 import { callLLM } from '../ai/openrouter.js';
 import { compileToD2 } from './compiler.js';
 import { renderD2 } from './render.js';
-import { resolveTheme } from './themes.js';
+import { resolveTheme, resolvePreset } from './themes.js';
 import { DIAGRAM_SYSTEM_PROMPT, buildUserPrompt } from './prompts.js';
 import { loadCheckpoint, saveCheckpoint, mergeElements } from './checkpoint.js';
 import type { DiagramPipelineConfig, DiagramPipelineResult, DiagramTimingEntry, SimplifiedElement } from './types.js';
@@ -90,6 +90,10 @@ export async function runDiagramPipeline(
     const checkpoint = time('Checkpoint', () => loadCheckpoint(config.fromCheckpoint!));
     elements = mergeElements(checkpoint.elements, elements);
   }
+
+  // Resolve color preset (available for future per-element coloring)
+  const _preset = resolvePreset(config.preset);
+  void _preset; // reserved for future use
 
   // Step 3: Compile to D2
   onProgress?.('Compiling D2...');

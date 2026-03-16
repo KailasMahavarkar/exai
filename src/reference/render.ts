@@ -57,7 +57,7 @@ function renderColors(): void {
 function renderElements(): void {
   console.log('\n  ## Element Format\n');
 
-  console.log('  ### Shape types');
+  console.log('  ### D2 Shape types');
   for (const shape of ELEMENT_FORMAT.shapes) {
     console.log(`    ${shape.type.padEnd(12)} ${shape.use}`);
   }
@@ -70,28 +70,25 @@ function renderElements(): void {
   console.log(`    Shape: ${ELEMENT_FORMAT.optionalFields.shape.join(', ')}`);
   console.log(`    Arrow: ${ELEMENT_FORMAT.optionalFields.arrow.join(', ')}`);
 
-  console.log('\n  ### Label format');
-  console.log(`    String: ${ELEMENT_FORMAT.labelFormat.string}`);
-  console.log(`    Object: ${ELEMENT_FORMAT.labelFormat.object}`);
-  console.log('    Font families:');
-  for (const [id, name] of Object.entries(ELEMENT_FORMAT.labelFormat.fontFamilies)) {
-    console.log(`      ${id} = ${name}`);
+  console.log('\n  ### Font sizes');
+  for (const [key, desc] of Object.entries(ELEMENT_FORMAT.fontSizes)) {
+    console.log(`    ${key.padEnd(12)} ${desc}`);
   }
+  console.log(`\n  ### Fonts`);
+  console.log(`    ${ELEMENT_FORMAT.fonts}`);
 
   console.log('\n  ### Pseudo-elements');
   for (const pseudo of ELEMENT_FORMAT.pseudoElements) {
-    console.log(`    ${pseudo.type.padEnd(20)} ${pseudo.fields.padEnd(25)} ${pseudo.use}`);
+    console.log(`    ${pseudo.type.padEnd(20)} ${pseudo.fields.padEnd(30)} ${pseudo.use}`);
   }
 }
 
 function renderSizing(): void {
-  console.log('\n  ## Sizing Rules\n');
-  for (const [key, value] of Object.entries(SIZING)) {
-    const label = key.replace(/([A-Z])/g, ' $1').toLowerCase();
-    console.log(
-      `    ${label.padEnd(25)} ${value}${typeof value === 'number' && key !== 'lineHeight' ? 'px' : ''}`
-    );
-  }
+  console.log('\n  ## Sizing\n');
+  console.log(`    ${SIZING.note}`);
+  console.log(`    Default font size:    ${SIZING.defaultFontSize}`);
+  console.log(`    Title font size:      ${SIZING.titleFontSize}`);
+  console.log(`    Annotation font size: ${SIZING.annotationFontSize}`);
 }
 
 function renderSchemes(): void {
@@ -119,7 +116,7 @@ function renderTips(): void {
 export function renderReference(sectionRaw: string): void {
   const section = validateSection(sectionRaw);
 
-  console.log('\n  ◆ Excalidraw Diagram Reference');
+  console.log('\n  ◆ D2 Diagram Reference');
   console.log('  ━'.repeat(20));
 
   if (section === 'all' || section === 'colors') renderColors();

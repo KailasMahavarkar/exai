@@ -121,52 +121,43 @@ export const COLOR_SCHEMES = {
 
 export const ELEMENT_FORMAT = {
   shapes: [
-    { type: 'rectangle', use: 'Services, components, processes (default)' },
-    { type: 'ellipse', use: 'Users, external systems, start/end points' },
-    { type: 'diamond', use: 'Decision points, routers' },
+    { type: 'rectangle', use: 'Services, APIs, components (default)' },
+    { type: 'circle', use: 'Users, actors, external entities' },
+    { type: 'diamond', use: 'Decision points, conditions, routers' },
+    { type: 'oval', use: 'Start/end points, events, triggers' },
+    { type: 'hexagon', use: 'Processes, workers, transformations' },
+    { type: 'cylinder', use: 'Databases, data stores, persistent storage' },
+    { type: 'queue', use: 'Message queues, buffers, streams' },
+    { type: 'package', use: 'Modules, packages, libraries' },
+    { type: 'page', use: 'Documents, configs, files' },
   ],
   requiredFields: {
-    shape: ['type', 'id', 'label'],
+    shape: ['type', 'id', 'text'],
     arrow: ['type ("arrow")', 'from (source id)', 'to (target id)'],
   },
   optionalFields: {
-    shape: ['backgroundColor', 'strokeColor', 'width', 'height', 'group'],
-    arrow: ['label', 'strokeColor', 'strokeStyle', 'id'],
+    shape: ['backgroundColor', 'strokeColor', 'fontSize'],
+    arrow: ['text', 'strokeColor', 'strokeStyle', 'animated'],
   },
-  labelFormat: {
-    string: '"My Label"',
-    object: '{ "text": "My Label", "fontSize": 20, "fontFamily": 2, "strokeColor": "#c92a2a" }',
-    fontFamilies: {
-      1: 'Virgil (hand)',
-      2: 'Helvetica',
-      3: 'Cascadia (code)',
-      5: 'Excalifont',
-      6: 'Nunito',
-      7: 'Lilita One',
-      8: 'Comic Shanns',
-    },
+  fontSizes: {
+    title: '24 — titles and headings',
+    normal: '16 — standard labels (default)',
+    annotation: '12 — small annotations and notes',
   },
+  fonts: 'D2 uses system fonts. Use style.font-size on elements to control size.',
   pseudoElements: [
-    { type: 'cameraUpdate', fields: 'zoom?, scrollX?, scrollY?', use: 'Override viewport' },
-    { type: 'delete', fields: 'targetId', use: 'Remove element by ID' },
-    { type: 'restoreCheckpoint', fields: 'name', use: 'Load checkpoint as base' },
+    { type: 'zone', fields: 'id, label, children[]', use: 'Visual grouping of shapes' },
+    { type: 'text', fields: 'text, position (above/below)', use: 'Title or footer text' },
   ],
 } as const;
 
 // ── Sizing Rules ──
 
 export const SIZING = {
-  defaultShapeWidth: 230,
-  defaultShapeHeight: 100,
-  defaultDiamondWidth: 200,
-  defaultDiamondHeight: 120,
+  note: 'D2 handles layout and sizing automatically. Use font-size to control text size.',
   defaultFontSize: 16,
-  arrowLabelFontSize: 13,
-  nodeGapX: 150,
-  nodeGapY: 150,
-  padding: 80,
-  lineHeight: 1.25,
-  charWidthEstimate: 8,
+  titleFontSize: 24,
+  annotationFontSize: 12,
 } as const;
 
 // ── Tips ──

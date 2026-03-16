@@ -22,6 +22,14 @@ function sanitizeId(id: string): string {
   return `"${id.replace(/"/g, '\\"')}"`;
 }
 
+function escapeLabel(text: string): string {
+  // Handle multiline text: replace literal \n with D2 newline escape
+  let label = text.replace(/\\n/g, '\\n');
+  // Escape special D2 chars in labels: pipes, braces, colons at start
+  label = label.replace(/([|{}])/g, '\\$1');
+  return label;
+}
+
 function emitStyles(indent: string, styles: Record<string, string | number | boolean>): string[] {
   const lines: string[] = [];
   for (const [key, value] of Object.entries(styles)) {
@@ -36,6 +44,7 @@ function shapeStyles(shape: SimplifiedShape): Record<string, string | number | b
   const styles: Record<string, string | number | boolean> = {};
   if (shape.backgroundColor) styles.fill = shape.backgroundColor;
   if (shape.strokeColor) styles.stroke = shape.strokeColor;
+  if (shape.fontSize) styles['font-size'] = shape.fontSize;
   return styles;
 }
 
@@ -80,7 +89,7 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
   for (const t of texts) {
     if (t.position === 'above') {
       const id = t.id || 'title';
-      lines.push(`${sanitizeId(id)}: ${t.text} {`);
+      lines.push(`${sanitizeId(id)}: ${escapeLabel(t.text)} {`);
       lines.push('  shape: text');
       lines.push('  style.font-size: 24');
       lines.push('}');
@@ -90,7 +99,7 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
 
   // Zones with children
   for (const zone of zones) {
-    lines.push(`${sanitizeId(zone.id)}: ${zone.label} {`);
+    lines.push(`${sanitizeId(zone.id)}: ${escapeLabel(zone.label)} {`);
     const zStyles: Record<string, string | number | boolean> = {};
     if (zone.backgroundColor) zStyles.fill = zone.backgroundColor;
     if (zone.strokeColor) zStyles.stroke = zone.strokeColor;
@@ -106,7 +115,7 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
         continue;
       }
       const d2Shape = SHAPE_MAP[child.type];
-      lines.push(`  ${sanitizeId(child.id)}: ${child.text}${d2Shape ? ` { shape: ${d2Shape} }` : ''}`);
+      lines.push(`  ${sanitizeId(child.id)}: ${escapeLabel(child.text)}${d2Shape ? ` { shape: ${d2Shape} }` : ''}`);
       const cs = shapeStyles(child);
       if (Object.keys(cs).length > 0) {
         // Rewrite last line to open block
@@ -136,9 +145,9 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
     const hasStyles = Object.keys(cs).length > 0;
 
     if (!hasShape && !hasStyles) {
-      lines.push(`${sanitizeId(shape.id)}: ${shape.text}`);
+      lines.push(`${sanitizeId(shape.id)}: ${escapeLabel(shape.text)}`);
     } else {
-      lines.push(`${sanitizeId(shape.id)}: ${shape.text} {`);
+      lines.push(`${sanitizeId(shape.id)}: ${escapeLabel(shape.text)} {`);
       if (hasShape) lines.push(`  shape: ${d2Shape}`);
       if (hasStyles) lines.push(...emitStyles('  ', cs));
       lines.push('}');
@@ -151,7 +160,7 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
   for (const t of texts) {
     if (t.position === 'below') {
       const id = t.id || 'footer';
-      lines.push(`${sanitizeId(id)}: ${t.text} {`);
+      lines.push(`${sanitizeId(id)}: ${escapeLabel(t.text)} {`);
       lines.push('  shape: text');
       lines.push('  style.font-size: 14');
       lines.push('}');
@@ -160,6 +169,7 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
   }
 
   // Arrows
+  if (arrows.length > 0) lines.push('');
   for (const arrow of arrows) {
     const src = childToZone.has(arrow.from)
       ? `${sanitizeId(childToZone.get(arrow.from)!)}.${sanitizeId(arrow.from)}`
@@ -169,7 +179,7 @@ export function compileToD2(elements: SimplifiedElement[], direction: DiagramDir
       : sanitizeId(arrow.to);
 
     const as = arrowStyles(arrow);
-    const label = arrow.text ? `: ${arrow.text}` : '';
+    const label = arrow.text ? `: ${escapeLabel(arrow.text)}` : '';
 
     if (Object.keys(as).length === 0) {
       lines.push(`${src} -> ${dst}${label}`);

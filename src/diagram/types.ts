@@ -8,6 +8,7 @@ export interface SimplifiedShape {
   text: string;
   backgroundColor?: string;
   strokeColor?: string;
+  fontSize?: number;
 }
 
 export interface SimplifiedArrow {
@@ -57,6 +58,9 @@ export interface DiagramPipelineConfig {
   verbose?: boolean;
   useCache?: boolean;
   timeoutMs?: number;
+
+  // Color preset
+  preset?: string;
 
   // Deterministic mode
   jsonInput?: string;

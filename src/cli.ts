@@ -115,6 +115,7 @@ program
   .option('--layout <engine>', 'Layout engine: dagre or elk')
   .option('--sketch', 'Enable sketch/hand-drawn mode')
   .option('--pad <pixels>', 'Padding around diagram in pixels')
+  .option('--preset <name>', 'Color preset: default, ocean, earth, sunset, neon, mono, candy')
   .option('--save-d2', 'Also save the intermediate .d2 source file')
   .option('--model <model>', 'LLM model to use')
   .option(
@@ -189,7 +190,7 @@ program
 
       console.log(`\n◆ D2 Diagram Generator`);
       console.log(`  Input: ${options.json || options.stdin ? options.json || 'stdin' : 'AI'}`);
-      console.log(`  Direction: ${direction}  Theme: ${options.theme || 'default'}`);
+      console.log(`  Direction: ${direction}  Theme: ${options.theme || 'default'}  Preset: ${options.preset || 'default'}`);
       console.log(`  Output: ${output}\n`);
 
       const result = await runDiagramPipeline(
@@ -207,6 +208,7 @@ program
           verbose: isVerbose,
           useCache: options.cache !== false && config.cache !== false,
           timeoutMs: (config.timeoutSecs ?? 120) * 1000,
+          preset: options.preset,
           jsonInput: options.json,
           stdin: options.stdin,
           checkpoint: options.checkpoint,
@@ -489,6 +491,27 @@ program
       console.log();
     }
     console.log('  Custom: pass any OpenAI-compatible URL as --provider\n');
+  });
+
+/**
+ * Themes command — list available D2 themes and color presets
+ */
+program
+  .command('themes')
+  .description('List available D2 themes and color presets')
+  .action(async () => {
+    const { D2_THEMES, COLOR_PRESETS } = await import('./diagram/themes.js');
+    console.log('\n  D2 Themes:\n');
+    for (const [name, id] of Object.entries(D2_THEMES)) {
+      if (name === 'light' || name === 'dark') continue; // skip shortcuts
+      const dark = id >= 100 && id < 300 ? ' (dark)' : id >= 300 ? ' (special)' : '';
+      console.log(`  ${name.padEnd(24)} --theme ${id}${dark}`);
+    }
+    console.log('\n  Color Presets:\n');
+    for (const [key, preset] of Object.entries(COLOR_PRESETS)) {
+      console.log(`  ${key.padEnd(12)} ${preset.name}`);
+    }
+    console.log('\n  Use: exai diagram "prompt" --theme terminal --preset ocean\n');
   });
 
 // Parse arguments and run
