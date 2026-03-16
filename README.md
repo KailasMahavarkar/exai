@@ -1,9 +1,9 @@
 # exai
 
-CLI that turns natural language into Excalidraw diagrams. Point it at your codebase, describe what you want, get a `.excalidraw` file. Export to PNG/SVG. Share via excalidraw.com.
+AI-powered CLI that turns natural language into diagrams. Powered by [D2](https://d2lang.com) — automatic layout, native SVG/PNG export, no browser needed.
 
 ```bash
-exai diagram "microservice architecture with auth, users, and database" --theme dark
+exai diagram "microservice architecture with auth, users, and database" --sketch
 ```
 
 ## Install
@@ -12,22 +12,18 @@ exai diagram "microservice architecture with auth, users, and database" --theme 
 npm i -g exai
 ```
 
-Or from source:
+Requires [D2](https://d2lang.com/tour/install):
 
 ```bash
-git clone https://github.com/KailasMahavarkar/exai.git
-cd exai
-npm install && npm run build
+curl -fsSL https://d2lang.com/install.sh | sh
 ```
 
 ## Setup
 
-Store your API key securely (saved in `~/.exai/session.json`, never committed):
-
 ```bash
-exai auth set openrouter sk-or-v1-...
-exai auth set groq gsk_...            # add multiple providers
-exai auth default openrouter          # set default
+exai auth set openrouter sk-or-v1-...    # store API key securely
+exai auth set groq gsk_...               # multiple providers
+exai auth default openrouter             # set default
 ```
 
 Or use environment variables:
@@ -36,110 +32,145 @@ Or use environment variables:
 export EXAI_OPENROUTER_APIKEY="sk-or-v1-..."
 ```
 
-Or use a local provider (no API key needed):
+Or local models (no API key):
 
 ```bash
 exai diagram "auth flow" --provider ollama
 ```
-
-Key priority: `--api-key` flag > env var > `~/.exai/session.json`
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `exai diagram` | Generate diagram from AI prompt or JSON |
-| `exai ai` | Generate flowchart from natural language + codebase context |
-| `exai create` | Create flowchart from DSL/JSON/DOT |
-| `exai export` | Convert `.excalidraw` to PNG or SVG |
-| `exai share` | Upload to excalidraw.com (e2e encrypted) |
+| `exai themes` | List D2 themes and color presets |
 | `exai checkpoint` | Manage saved diagram states |
 | `exai reference` | Built-in element & color reference |
-| `exai auth` | Manage API keys (`~/.exai/session.json`) |
-| `exai providers` | List available LLM providers |
+| `exai auth` | Manage API keys |
+| `exai providers` | List LLM providers |
 | `exai cache` | Manage LLM response cache |
 | `exai init` | Create starter config file |
-| `exai parse` | Parse and validate input |
 
 ## Diagram Generation
 
-Generate `.excalidraw` diagrams from natural language or structured JSON.
-
 ### AI Mode
+
+Describe what you want, the LLM outputs structured JSON, D2 renders it.
 
 ```bash
 exai diagram "e-commerce checkout: cart, payment, order service, inventory"
-exai diagram "CI/CD pipeline" --direction LR --style clean --theme dark
-exai diagram "auth flow" --provider ollama --model llama3.2
+exai diagram "CI/CD pipeline" --direction LR --theme terminal
+exai diagram "auth flow" --sketch --provider groq
 ```
 
 ### Deterministic Mode (No AI)
 
 ```bash
-exai diagram --json elements.json -o my-diagram.excalidraw
-cat elements.json | exai diagram --stdin
+exai diagram --json elements.json -o architecture.svg
+exai diagram --json elements.json -o architecture.png --sketch
+cat elements.json | exai diagram --stdin -o diagram.svg
 ```
 
-**Simplified element format:**
+### JSON Element Format
 
 ```json
 [
-  { "type": "rectangle", "id": "api", "label": "API Gateway", "backgroundColor": "#a5d8ff" },
-  { "type": "ellipse", "id": "user", "label": "User", "backgroundColor": "#e7f5ff" },
-  { "type": "rectangle", "id": "auth", "label": "Auth Service", "backgroundColor": "#d0bfff" },
-  { "type": "arrow", "from": "user", "to": "api" },
-  { "type": "arrow", "from": "api", "to": "auth", "label": "JWT" }
+  { "type": "text", "text": "System Architecture", "position": "above" },
+  { "type": "zone", "id": "backend", "label": "Backend", "children": ["auth", "users"] },
+  { "type": "circle", "id": "client", "text": "Client", "backgroundColor": "#e7f5ff" },
+  { "type": "rectangle", "id": "gateway", "text": "API Gateway", "backgroundColor": "#a5d8ff" },
+  { "type": "rectangle", "id": "auth", "text": "Auth Service", "backgroundColor": "#d0bfff" },
+  { "type": "rectangle", "id": "users", "text": "User Service", "backgroundColor": "#d0bfff" },
+  { "type": "cylinder", "id": "db", "text": "Database", "backgroundColor": "#b2f2bb" },
+  { "type": "arrow", "from": "client", "to": "gateway" },
+  { "type": "arrow", "from": "gateway", "to": "auth", "text": "JWT" },
+  { "type": "arrow", "from": "gateway", "to": "users", "text": "REST" },
+  { "type": "arrow", "from": "auth", "to": "db" },
+  { "type": "arrow", "from": "users", "to": "db" }
 ]
 ```
 
-No coordinates needed — the CLI auto-layouts using topological sort, expands labels into shape + bound text pairs, resolves arrow bindings, and applies style presets.
+No coordinates, no sizing — D2 handles layout automatically.
 
-### Rich Labels
+### Shape Types
+
+| Type | Use |
+|------|-----|
+| `rectangle` | Services, APIs, components (default) |
+| `circle` | Users, actors, external entities |
+| `diamond` | Decision points, conditions |
+| `oval` | Start/end points, events |
+| `hexagon` | Processes, workers |
+| `cylinder` | Databases, data stores |
+| `queue` | Message queues, buffers |
+| `package` | Modules, libraries |
+| `page` | Documents, configs |
+
+### Zones
+
+Group related shapes with dashed background containers:
 
 ```json
-{ "type": "rectangle", "id": "api", "label": { "text": "API Gateway", "fontSize": 24, "fontFamily": 2 } }
+{ "type": "zone", "id": "backend", "label": "Backend Layer", "children": ["auth", "users", "db"] }
 ```
 
-| fontFamily | Font |
-|------------|------|
-| 1 | Virgil (handwritten) |
-| 2 | Helvetica (sans-serif) |
-| 3 | Cascadia (monospace) |
-| 5 | Excalifont |
-
-### Pseudo-elements
-
-Control pipeline behavior without appearing in output:
+### Arrows
 
 ```json
-{ "type": "cameraUpdate", "zoom": 0.8 }
-{ "type": "delete", "targetId": "unused-node" }
-{ "type": "restoreCheckpoint", "name": "v1" }
+{ "type": "arrow", "from": "api", "to": "db", "text": "SQL", "strokeStyle": "dashed" }
 ```
+
+| Property | Values |
+|----------|--------|
+| `text` | Label on the arrow |
+| `strokeStyle` | `solid` (default), `dashed`, `dotted` |
+| `strokeColor` | Hex color |
+| `animated` | `true` for animated arrows |
 
 ### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-o, --output` | `diagram.excalidraw` | Output file path |
+| `-o, --output` | `diagram.svg` | Output path (.svg, .png, .pdf, .d2) |
 | `-d, --direction` | `TB` | `TB` (top-bottom) or `LR` (left-right) |
-| `--style` | `hand-drawn` | `hand-drawn` or `clean` |
-| `--theme` | `light` | `light` or `dark` |
-| `--model` | provider default | LLM model |
-| `--provider` | `openrouter` | LLM provider or custom URL |
+| `--theme` | — | D2 theme name or number |
+| `--preset` | `default` | Color preset: ocean, earth, neon, mono, candy |
+| `--sketch` | — | Hand-drawn sketch mode |
+| `--layout` | `dagre` | Layout engine: `dagre` or `elk` |
+| `--pad` | — | Padding in pixels |
+| `--save-d2` | — | Also save intermediate .d2 source |
 | `--json` | — | JSON file (deterministic mode) |
 | `--stdin` | — | Read JSON from stdin |
-| `--checkpoint` | — | Save diagram state as named checkpoint |
-| `--from-checkpoint` | — | Load checkpoint, merge new elements on top |
+| `--model` | provider default | LLM model |
+| `--provider` | `openrouter` | LLM provider or custom URL |
+| `--checkpoint` | — | Save diagram state |
+| `--from-checkpoint` | — | Load checkpoint, merge new elements |
 | `--no-cache` | — | Disable response cache |
-| `--verbose` | — | Show per-step timing |
+| `--verbose` | — | Show D2 source and timing |
+
+## Themes
+
+14 built-in D2 themes + 7 color presets.
+
+```bash
+exai themes                                       # list all
+
+exai diagram "arch" --theme grape-soda            # light theme
+exai diagram "arch" --theme terminal              # dark theme
+exai diagram "arch" --theme origami               # special
+exai diagram "arch" --sketch                      # hand-drawn mode
+
+exai diagram "arch" --preset ocean                # blue/cyan colors
+exai diagram "arch" --preset mono                 # grayscale
+exai diagram "arch" --preset candy                # pink/purple
+```
 
 ## Providers
 
-Use `--provider` to switch between LLM providers. All use the OpenAI chat completions format.
+8 built-in LLM providers. All use the OpenAI chat completions format.
 
 ```bash
-exai providers                                    # list all providers
+exai providers                                    # list all
 
 exai diagram "auth flow" --provider openrouter    # default
 exai diagram "auth flow" --provider openai --model gpt-4o
@@ -147,9 +178,6 @@ exai diagram "auth flow" --provider groq
 exai diagram "auth flow" --provider deepseek
 exai diagram "auth flow" --provider ollama        # local, no API key
 exai diagram "auth flow" --provider lmstudio      # local, no API key
-
-# any OpenAI-compatible endpoint
-exai diagram "auth flow" --provider http://my-server:8080/v1/chat/completions
 ```
 
 | Provider | Default Model | API Key |
@@ -163,23 +191,16 @@ exai diagram "auth flow" --provider http://my-server:8080/v1/chat/completions
 | `ollama` | `llama3.2` | Not needed |
 | `lmstudio` | `local-model` | Not needed |
 
-## Export
-
-Convert `.excalidraw` files to PNG or SVG using Puppeteer + `@excalidraw/utils`.
+## Auth
 
 ```bash
-exai export diagram.excalidraw --format png
-exai export diagram.excalidraw --format svg -o output.svg
+exai auth set openrouter sk-or-v1-...   # save key (~/.exai/session.json)
+exai auth list                          # show stored keys
+exai auth default groq                  # set default provider
+exai auth remove openai                 # delete a key
 ```
 
-## Share
-
-Upload to excalidraw.com with end-to-end encryption (AES-GCM).
-
-```bash
-exai share diagram.excalidraw
-# => https://excalidraw.com/#json=abc123,base64key
-```
+Key priority: `--api-key` flag > env var > `~/.exai/session.json`
 
 ## Checkpoints
 
@@ -187,7 +208,7 @@ Save and restore diagram states for iterative building.
 
 ```bash
 exai diagram --json base.json --checkpoint my-project
-exai diagram --json additions.json --from-checkpoint my-project -o full.excalidraw
+exai diagram --json additions.json --from-checkpoint my-project -o full.svg
 
 exai checkpoint list
 exai checkpoint show my-project
@@ -196,81 +217,47 @@ exai checkpoint remove my-project
 
 ## Reference
 
-Built-in cheat sheet for colors, elements, sizing, and tips.
-
 ```bash
 exai reference              # show all
 exai reference colors       # color palettes
-exai reference elements     # element format
-exai reference --json       # JSON output (pipe to LLM context)
-```
-
-## AI with Codebase Context
-
-The `ai` command gathers and compresses your codebase, then sends it to the LLM for context-aware diagram generation.
-
-```bash
-exai ai "system architecture diagram" -c ./src -c ./infra
-exai ai "data flow" -c ./src --exclude "*.test.*" --provider groq
-exai ai "architecture" -c ./src --redraw    # re-render from cache (no API call)
-```
-
-## DSL Syntax
-
-Directive-style DSL for the `create` command:
-
-```
-@direction TB
-@spacing 60
-
-@node user user "End User"
-@node api orchestrator "API Gateway" bg:#ffe3e3 stroke:#c92a2a
-@node auth service "Auth Service" bg:#e5dbff stroke:#7048e8
-@node db database "Users DB" bg:#d3f9d8 stroke:#2f9e44
-
-@edge user api "calls"
-@edge api auth "validates token" dashed
-@edge auth db "reads/writes"
+exai reference elements     # D2 shapes and format
+exai reference --json       # JSON output for LLM context
 ```
 
 ## Config
 
-One file controls everything. Generate with `exai init`.
+Generate with `exai init`. All fields optional.
 
 ```json
 {
   "model": "moonshotai/kimi-k2.5",
   "provider": "openrouter",
   "temperature": 0,
-  "format": "dsl",
-  "output": "flowchart.excalidraw",
-  "direction": "TB",
-  "spacing": 50,
-  "context": ["."],
-  "exclude": ["dist", "coverage", "*.lock"],
-  "compress": true,
-  "compressMode": "balanced",
   "cache": true,
   "verbose": false,
   "timeoutSecs": 120,
-  "excalidraw": {
-    "strokeWidth": 2,
-    "fillStyle": "hachure",
-    "roughness": 1,
-    "fontFamily": "hand",
-    "fontSize": 20
-  },
   "diagram": {
     "direction": "TB",
-    "style": "hand-drawn",
-    "theme": "light"
+    "theme": "grape-soda",
+    "layout": "dagre",
+    "sketch": false
   }
 }
 ```
 
-All fields optional. Priority: **CLI flags > env/.env > config file > defaults**.
+Priority: **CLI flags > env var > config file > defaults**
 
-See [CHEATSHEET.md](CHEATSHEET.md) for the full reference.
+## How It Works
+
+```
+Prompt → LLM → JSON elements → D2 compiler → d2 binary → SVG/PNG
+```
+
+1. You describe the diagram (or provide JSON)
+2. LLM outputs structured JSON (shapes, arrows, zones)
+3. exai compiles JSON to D2 syntax
+4. D2 binary renders to SVG/PNG with automatic layout
+5. No browser, no Puppeteer, no coordinates needed
 
 ## License
 
