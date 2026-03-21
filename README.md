@@ -2,14 +2,14 @@
 
 # exai
 
-**Turn plain English into architecture diagrams — instantly.**
+**Turn plain English into architecture diagrams - instantly.**
 
 Powered by [D2](https://d2lang.com) for automatic layout, native SVG/PNG export, and zero browser dependency.
 
 [![npm](https://img.shields.io/npm/v/@orkait-dev/exai?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@orkait-dev/exai)
 [![npm downloads](https://img.shields.io/npm/dm/@orkait-dev/exai?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@orkait-dev/exai)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![D2](https://img.shields.io/badge/powered%20by-D2-5c4ee5?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyeiIvPjwvc3ZnPg==)](https://d2lang.com)
+[![D2](https://img.shields.io/badge/powered%20by-D2-5c4ee5)](https://d2lang.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?logo=opensourceinitiative&logoColor=white)](LICENSE)
 
 ```bash
@@ -18,7 +18,7 @@ exai diagram "microservice architecture with auth, users, and database" --sketch
 
 </div>
 
-## ## Install
+## 📦 Install
 
 ```bash
 npm i -g @orkait-dev/exai
@@ -30,7 +30,7 @@ Also requires the [D2](https://d2lang.com/tour/install) binary:
 curl -fsSL https://d2lang.com/install.sh | sh
 ```
 
-## ## Setup
+## 🔑 Setup
 
 Store your API key and pick a default provider:
 
@@ -52,7 +52,7 @@ Or skip API keys entirely with a local model:
 exai diagram "auth flow" --provider ollama
 ```
 
-## ## Commands
+## 📋 Commands
 
 | Command | Description |
 |---------|-------------|
@@ -65,9 +65,9 @@ exai diagram "auth flow" --provider ollama
 | `exai cache` | Manage LLM response cache |
 | `exai init` | Create a starter config file |
 
-## ## Diagram Generation
+## 🎨 Diagram Generation
 
-### AI Mode
+### 🤖 AI Mode
 
 Describe what you want - the LLM outputs structured JSON, D2 renders it:
 
@@ -77,7 +77,7 @@ exai diagram "CI/CD pipeline" --direction LR --theme terminal
 exai diagram "auth flow" --sketch --provider groq
 ```
 
-### Deterministic Mode (no AI)
+### 🔧 Deterministic Mode (no AI)
 
 ```bash
 exai diagram --json elements.json -o architecture.svg
@@ -85,7 +85,7 @@ exai diagram --json elements.json -o architecture.png --sketch
 cat elements.json | exai diagram --stdin -o diagram.svg
 ```
 
-### JSON Element Format
+### 📄 JSON Element Format
 
 <details>
 <summary>Show full example</summary>
@@ -111,7 +111,7 @@ No coordinates, no sizing - D2 handles layout automatically.
 
 </details>
 
-### Shapes
+### 🔷 Shapes
 
 <details>
 <summary>Show all shape types</summary>
@@ -130,7 +130,7 @@ No coordinates, no sizing - D2 handles layout automatically.
 
 </details>
 
-### Zones
+### 🗂️ Zones
 
 Group related shapes with dashed background containers:
 
@@ -138,7 +138,7 @@ Group related shapes with dashed background containers:
 { "type": "zone", "id": "backend", "label": "Backend Layer", "children": ["auth", "users", "db"] }
 ```
 
-### Arrows
+### ➡️ Arrows
 
 ```json
 { "type": "arrow", "from": "api", "to": "db", "text": "SQL", "strokeStyle": "dashed" }
@@ -151,7 +151,7 @@ Group related shapes with dashed background containers:
 | `strokeColor` | Hex color |
 | `animated` | `true` for animated arrows |
 
-## ## Flags
+## 🚩 Flags
 
 <details>
 <summary>Show all flags</summary>
@@ -177,7 +177,7 @@ Group related shapes with dashed background containers:
 
 </details>
 
-## ## Themes
+## 🎭 Themes
 
 14 built-in D2 themes + 7 color presets:
 
@@ -194,7 +194,7 @@ exai diagram "arch" --preset mono                 # grayscale
 exai diagram "arch" --preset candy                # pink/purple
 ```
 
-## ## Providers
+## 🤝 Providers
 
 8 built-in LLM providers, all using the OpenAI chat completions format:
 
@@ -223,7 +223,7 @@ exai diagram "auth flow" --provider groq
 exai diagram "auth flow" --provider ollama        # local, no API key
 ```
 
-## ## Auth
+## 🔐 Auth
 
 ```bash
 exai auth set openrouter sk-or-v1-...   # save key to ~/.exai/session.json
@@ -234,7 +234,7 @@ exai auth remove openai                 # delete a key
 
 Key priority: `--api-key` flag > env var > `~/.exai/session.json`
 
-## ## Checkpoints
+## 💾 Checkpoints
 
 Save and restore diagram states for iterative building:
 
@@ -247,7 +247,7 @@ exai checkpoint show my-project
 exai checkpoint remove my-project
 ```
 
-## ## Reference
+## 📚 Reference
 
 ```bash
 exai reference              # show everything
@@ -256,7 +256,7 @@ exai reference elements     # D2 shapes and format
 exai reference --json       # JSON output for LLM context
 ```
 
-## ## Config
+## ⚙️ Config
 
 Generate a starter config with `exai init`. All fields are optional:
 
@@ -279,7 +279,7 @@ Generate a starter config with `exai init`. All fields are optional:
 
 Priority: **CLI flags > env var > config file > defaults**
 
-## ## How It Works
+## ⚡ How It Works
 
 ```
 Prompt -> LLM -> JSON elements -> D2 compiler -> d2 binary -> SVG/PNG
@@ -292,6 +292,6 @@ Prompt -> LLM -> JSON elements -> D2 compiler -> d2 binary -> SVG/PNG
 
 No browser, no Puppeteer, no coordinates needed.
 
-## ## License
+## 📄 License
 
 MIT
