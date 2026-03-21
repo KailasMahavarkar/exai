@@ -1,5 +1,5 @@
 {
-  "name": "exai",
+  "name": "@orkait-dev/exai",
   "version": "1.9.0",
   "description": "AI-powered CLI for generating D2 diagrams from natural language",
   "type": "module",

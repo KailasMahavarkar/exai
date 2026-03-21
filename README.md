@@ -1,61 +1,75 @@
+<div align="center">
+
 # exai
 
-AI-powered CLI that turns natural language into diagrams. Powered by [D2](https://d2lang.com) — automatic layout, native SVG/PNG export, no browser needed.
+**Turn plain English into architecture diagrams — instantly.**
+
+Powered by [D2](https://d2lang.com) for automatic layout, native SVG/PNG export, and zero browser dependency.
+
+[![npm](https://img.shields.io/npm/v/@orkait-dev/exai?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@orkait-dev/exai)
+[![npm downloads](https://img.shields.io/npm/dm/@orkait-dev/exai?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@orkait-dev/exai)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![D2](https://img.shields.io/badge/powered%20by-D2-5c4ee5?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyeiIvPjwvc3ZnPg==)](https://d2lang.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?logo=opensourceinitiative&logoColor=white)](LICENSE)
 
 ```bash
 exai diagram "microservice architecture with auth, users, and database" --sketch
 ```
 
-## Install
+</div>
+
+## ## Install
 
 ```bash
-npm i -g exai
+npm i -g @orkait-dev/exai
 ```
 
-Requires [D2](https://d2lang.com/tour/install):
+Also requires the [D2](https://d2lang.com/tour/install) binary:
 
 ```bash
 curl -fsSL https://d2lang.com/install.sh | sh
 ```
 
-## Setup
+## ## Setup
+
+Store your API key and pick a default provider:
 
 ```bash
-exai auth set openrouter sk-or-v1-...    # store API key securely
-exai auth set groq gsk_...               # multiple providers
+exai auth set openrouter sk-or-v1-...    # save key securely
+exai auth set groq gsk_...               # multiple providers supported
 exai auth default openrouter             # set default
 ```
 
-Or use environment variables:
+Or via environment variable:
 
 ```bash
 export EXAI_OPENROUTER_APIKEY="sk-or-v1-..."
 ```
 
-Or local models (no API key):
+Or skip API keys entirely with a local model:
 
 ```bash
 exai diagram "auth flow" --provider ollama
 ```
 
-## Commands
+## ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `exai diagram` | Generate diagram from AI prompt or JSON |
+| `exai diagram` | Generate a diagram from a prompt or JSON file |
 | `exai themes` | List D2 themes and color presets |
-| `exai checkpoint` | Manage saved diagram states |
-| `exai reference` | Built-in element & color reference |
+| `exai checkpoint` | Save and restore diagram states |
+| `exai reference` | Built-in element and color reference |
 | `exai auth` | Manage API keys |
-| `exai providers` | List LLM providers |
+| `exai providers` | List available LLM providers |
 | `exai cache` | Manage LLM response cache |
-| `exai init` | Create starter config file |
+| `exai init` | Create a starter config file |
 
-## Diagram Generation
+## ## Diagram Generation
 
 ### AI Mode
 
-Describe what you want, the LLM outputs structured JSON, D2 renders it.
+Describe what you want - the LLM outputs structured JSON, D2 renders it:
 
 ```bash
 exai diagram "e-commerce checkout: cart, payment, order service, inventory"
@@ -63,7 +77,7 @@ exai diagram "CI/CD pipeline" --direction LR --theme terminal
 exai diagram "auth flow" --sketch --provider groq
 ```
 
-### Deterministic Mode (No AI)
+### Deterministic Mode (no AI)
 
 ```bash
 exai diagram --json elements.json -o architecture.svg
@@ -72,6 +86,9 @@ cat elements.json | exai diagram --stdin -o diagram.svg
 ```
 
 ### JSON Element Format
+
+<details>
+<summary>Show full example</summary>
 
 ```json
 [
@@ -90,9 +107,14 @@ cat elements.json | exai diagram --stdin -o diagram.svg
 ]
 ```
 
-No coordinates, no sizing — D2 handles layout automatically.
+No coordinates, no sizing - D2 handles layout automatically.
 
-### Shape Types
+</details>
+
+### Shapes
+
+<details>
+<summary>Show all shape types</summary>
 
 | Type | Use |
 |------|-----|
@@ -105,6 +127,8 @@ No coordinates, no sizing — D2 handles layout automatically.
 | `queue` | Message queues, buffers |
 | `package` | Modules, libraries |
 | `page` | Documents, configs |
+
+</details>
 
 ### Zones
 
@@ -127,58 +151,55 @@ Group related shapes with dashed background containers:
 | `strokeColor` | Hex color |
 | `animated` | `true` for animated arrows |
 
-### Flags
+## ## Flags
+
+<details>
+<summary>Show all flags</summary>
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-o, --output` | `diagram.svg` | Output path (.svg, .png, .pdf, .d2) |
 | `-d, --direction` | `TB` | `TB` (top-bottom) or `LR` (left-right) |
-| `--theme` | — | D2 theme name or number |
-| `--preset` | `default` | Color preset: ocean, earth, neon, mono, candy |
-| `--sketch` | — | Hand-drawn sketch mode |
+| `--theme` | - | D2 theme name or number |
+| `--preset` | `default` | Color preset: `ocean`, `earth`, `neon`, `mono`, `candy` |
+| `--sketch` | - | Hand-drawn sketch mode |
 | `--layout` | `dagre` | Layout engine: `dagre` or `elk` |
-| `--pad` | — | Padding in pixels |
-| `--save-d2` | — | Also save intermediate .d2 source |
-| `--json` | — | JSON file (deterministic mode) |
-| `--stdin` | — | Read JSON from stdin |
-| `--model` | provider default | LLM model |
+| `--pad` | - | Padding in pixels |
+| `--save-d2` | - | Also save the intermediate .d2 source |
+| `--json` | - | JSON file (deterministic mode) |
+| `--stdin` | - | Read JSON from stdin |
+| `--model` | provider default | LLM model override |
 | `--provider` | `openrouter` | LLM provider or custom URL |
-| `--checkpoint` | — | Save diagram state |
-| `--from-checkpoint` | — | Load checkpoint, merge new elements |
-| `--no-cache` | — | Disable response cache |
-| `--verbose` | — | Show D2 source and timing |
+| `--checkpoint` | - | Save diagram state |
+| `--from-checkpoint` | - | Load checkpoint and merge new elements |
+| `--no-cache` | - | Disable response cache |
+| `--verbose` | - | Show D2 source and timing info |
 
-## Themes
+</details>
 
-14 built-in D2 themes + 7 color presets.
+## ## Themes
+
+14 built-in D2 themes + 7 color presets:
 
 ```bash
-exai themes                                       # list all
+exai themes                                       # list everything
 
-exai diagram "arch" --theme grape-soda            # light theme
-exai diagram "arch" --theme terminal              # dark theme
+exai diagram "arch" --theme grape-soda            # light
+exai diagram "arch" --theme terminal              # dark
 exai diagram "arch" --theme origami               # special
-exai diagram "arch" --sketch                      # hand-drawn mode
+exai diagram "arch" --sketch                      # hand-drawn
 
-exai diagram "arch" --preset ocean                # blue/cyan colors
+exai diagram "arch" --preset ocean                # blue/cyan
 exai diagram "arch" --preset mono                 # grayscale
 exai diagram "arch" --preset candy                # pink/purple
 ```
 
-## Providers
+## ## Providers
 
-8 built-in LLM providers. All use the OpenAI chat completions format.
+8 built-in LLM providers, all using the OpenAI chat completions format:
 
-```bash
-exai providers                                    # list all
-
-exai diagram "auth flow" --provider openrouter    # default
-exai diagram "auth flow" --provider openai --model gpt-4o
-exai diagram "auth flow" --provider groq
-exai diagram "auth flow" --provider deepseek
-exai diagram "auth flow" --provider ollama        # local, no API key
-exai diagram "auth flow" --provider lmstudio      # local, no API key
-```
+<details>
+<summary>Show all providers</summary>
 
 | Provider | Default Model | API Key |
 |----------|---------------|---------|
@@ -191,10 +212,21 @@ exai diagram "auth flow" --provider lmstudio      # local, no API key
 | `ollama` | `llama3.2` | Not needed |
 | `lmstudio` | `local-model` | Not needed |
 
-## Auth
+</details>
 
 ```bash
-exai auth set openrouter sk-or-v1-...   # save key (~/.exai/session.json)
+exai providers                                    # list all
+
+exai diagram "auth flow" --provider openrouter    # default
+exai diagram "auth flow" --provider openai --model gpt-4o
+exai diagram "auth flow" --provider groq
+exai diagram "auth flow" --provider ollama        # local, no API key
+```
+
+## ## Auth
+
+```bash
+exai auth set openrouter sk-or-v1-...   # save key to ~/.exai/session.json
 exai auth list                          # show stored keys
 exai auth default groq                  # set default provider
 exai auth remove openai                 # delete a key
@@ -202,9 +234,9 @@ exai auth remove openai                 # delete a key
 
 Key priority: `--api-key` flag > env var > `~/.exai/session.json`
 
-## Checkpoints
+## ## Checkpoints
 
-Save and restore diagram states for iterative building.
+Save and restore diagram states for iterative building:
 
 ```bash
 exai diagram --json base.json --checkpoint my-project
@@ -215,18 +247,18 @@ exai checkpoint show my-project
 exai checkpoint remove my-project
 ```
 
-## Reference
+## ## Reference
 
 ```bash
-exai reference              # show all
+exai reference              # show everything
 exai reference colors       # color palettes
 exai reference elements     # D2 shapes and format
 exai reference --json       # JSON output for LLM context
 ```
 
-## Config
+## ## Config
 
-Generate with `exai init`. All fields optional.
+Generate a starter config with `exai init`. All fields are optional:
 
 ```json
 {
@@ -247,18 +279,19 @@ Generate with `exai init`. All fields optional.
 
 Priority: **CLI flags > env var > config file > defaults**
 
-## How It Works
+## ## How It Works
 
 ```
-Prompt → LLM → JSON elements → D2 compiler → d2 binary → SVG/PNG
+Prompt -> LLM -> JSON elements -> D2 compiler -> d2 binary -> SVG/PNG
 ```
 
-1. You describe the diagram (or provide JSON)
+1. Describe the diagram (or provide JSON directly)
 2. LLM outputs structured JSON (shapes, arrows, zones)
 3. exai compiles JSON to D2 syntax
 4. D2 binary renders to SVG/PNG with automatic layout
-5. No browser, no Puppeteer, no coordinates needed
 
-## License
+No browser, no Puppeteer, no coordinates needed.
+
+## ## License
 
 MIT
